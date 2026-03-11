@@ -1,0 +1,144 @@
+# ============================================================
+#  Docker Compose — ParkingSystem (Monorepo)
+#  Serviços: MySQL 8, Mosquitto, Backend .NET 8, Frontend Next 14, Adminer
+# ============================================================
+
+services:
+  # ── MySQL 8 ────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: parking-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootPass@2026!}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-parking_system}
+      MYSQL_USER: ${MYSQL_USER:-parking_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ParkingApp@2026!}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-RootPass@2026!}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks:
+      - parking-network
+
+  # ── Mosquitto (MQTT Broker) ────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: parking-mosquitto
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "9001:9001"
+    volumes:
+      - ./infra/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -i healthcheck -W 5 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - parking-network
+
+  # ── Backend (.NET 8) ──────────────────────────────────────
+  backend:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      args:
+        CACHEBUST: ${CACHEBUST:-1}
+    container_name: parking-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-5167}:5167"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DOTNET_URLS=http://+:5167
+      - ConnectionStrings__DefaultConnection=Server=mysql;Port=3306;Database=${MYSQL_DATABASE:-parking_system};User=${MYSQL_USER:-parking_app};Password=${MYSQL_PASSWORD:-ParkingApp@2026!};CharSet=utf8mb4;
+      - Jwt__Key=${JWT_KEY:-ParkingSystem@SuperSecretKey2026!MustBeAtLeast32Chars}
+      - Jwt__Issuer=${JWT_ISSUER:-ParkingSystemAPI}
+      - Jwt__Audience=${JWT_AUDIENCE:-ParkingSystemClients}
+      - Mqtt__Broker=mosquitto
+      - Mqtt__Port=1883
+      - Mqtt__ClientId=parking-backend-docker
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5167/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+    networks:
+      - parking-network
+
+  # ── Frontend (Next.js 14) ─────────────────────────────────
+  frontend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5167}
+        NEXT_PUBLIC_SIGNALR_URL: ${NEXT_PUBLIC_SIGNALR_URL:-http://localhost:5167/hubs/parking}
+        CACHEBUST: ${CACHEBUST:-1}
+    container_name: parking-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:5167}
+      - NEXT_PUBLIC_SIGNALR_URL=${NEXT_PUBLIC_SIGNALR_URL:-http://localhost:5167/hubs/parking}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 15s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+    networks:
+      - parking-network
+
+  # ── Adminer (Visualização do DB — Opcional) ────────────────
+  adminer:
+    image: adminer:latest
+    container_name: parking-adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      - ADMINER_DEFAULT_SERVER=mysql
+    networks:
+      - parking-network
+    profiles:
+      - tools
+
+# ── Volumes Persistentes ─────────────────────────────────────
+volumes:
+  mysql_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
+    driver: local
+
+# ── Rede ─────────────────────────────────────────────────────
+networks:
+  parking-network:
+    driver: bridge
