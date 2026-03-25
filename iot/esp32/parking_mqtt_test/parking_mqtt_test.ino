@@ -14,6 +14,8 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Wire.h>
+#include <Adafruit_MCP23X17.h>
 
 // ============================================================
 //  CONFIGURAÇÕES — ajuste aqui antes de subir para o ESP32
@@ -25,33 +27,68 @@ const char* WIFI_PASSWORD = "03012006Ju";
 
 // Broker MQTT (IP do seu computador)
 const char* MQTT_BROKER   = "192.168.15.177";
-const int   MQTT_PORT     = 1883;
+const int   MQTT_PORT     = 1884;  // Docker Compose mapeou 1884:1883
 const char* MQTT_CLIENT_ID = "esp32-parking-01";
+const char* MQTT_USERNAME  = "parking_iot";
+const char* MQTT_PASSWORD  = "ParkingIot@2026";
 
 // Tópicos
 const char* TOPIC_TESTE   = "estacionamento/teste";
 const char* TOPIC_ENTRADA = "parking/entry";   // usado pelo backend
 const char* TOPIC_SAIDA   = "parking/exit";    // usado pelo backend
 const char* TOPIC_STATUS  = "parking/status";  // backend responde aqui
+const char* TOPIC_SPOT_BASE = "parking/spots"; // padrão oficial
+const char* TOPIC_DEVICE_STATUS = "parking/device/esp32-parking-01/status";
+
+// Compatibilidade temporária com backend legado
+const bool ENABLE_LEGACY_TOPIC_MIRROR = false;
 
 // ID do estacionamento (Estacionamento Central — vindo do banco)
 const char* PARKING_LOT_ID = "45fc18f2-bdd8-4b11-b964-f8face1147f0";
 
-// Total de vagas simuladas
-const int TOTAL_VAGAS = 3;
+// Total de vagas (22 sensores digitais D0)
+const int TOTAL_VAGAS = 22;
 
-// Intervalo de alternância de status (ms) — igual ao código HTTP anterior
-const unsigned long PUBLISH_INTERVAL = 10000;
+// Dois MCP23017 no mesmo barramento I2C
+// MCP #0: A2 A1 A0 = 000 -> 0x20
+// MCP #1: A2 A1 A0 = 001 -> 0x21
+const uint8_t MCP_ADDRESS_0 = 0x20;
+const uint8_t MCP_ADDRESS_1 = 0x21;
+
+struct SensorMap {
+  uint8_t mcpIndex; // 0 ou 1
+  uint8_t pin;      // 0..15 (GPA0..GPA7=0..7, GPB0..GPB7=8..15)
+};
+
+// Mapeamento padrão para 22 sensores:
+// Vagas 1..16  -> MCP 0 (pinos 0..15)
+// Vagas 17..22 -> MCP 1 (pinos 0..5)
+const SensorMap SENSOR_MAP[TOTAL_VAGAS] = {
+  {0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4},
+  {0, 5}, {0, 6}, {0, 7}, {0, 8}, {0, 9},
+  {0,10}, {0,11}, {0,12}, {0,13}, {0,14},
+  {0,15}, {1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}
+};
+
+// Lógica do sensor IR digital (D0)
+// true  => D0=0 significa OCUPADA
+// false => D0=1 significa OCUPADA
+const bool SENSOR_ACTIVE_LOW = true;
+
+// Intervalo de leitura/publicação quando houver mudança (ms)
+const unsigned long READ_INTERVAL = 500;
 
 // ============================================================
 //  VARIÁVEIS GLOBAIS
 // ============================================================
 WiFiClient   espClient;
 PubSubClient mqtt(espClient);
+Adafruit_MCP23X17 mcp;
+Adafruit_MCP23X17 mcp2;
 
-unsigned long lastPublishTime = 0;
+unsigned long lastReadTime = 0;
 int  messageCount = 0;
-bool vagaOcupada[TOTAL_VAGAS + 1] = {false, true, false, true}; // índice 1-3, espelha código HTTP anterior
+bool vagaOcupada[TOTAL_VAGAS + 1] = {false}; // índice 1..TOTAL_VAGAS
 
 // ============================================================
 //  CALLBACK — chamado quando backend publica em tópico assinado
@@ -105,46 +142,97 @@ void connectWiFi() {
 //  CONEXÃO MQTT
 // ============================================================
 void connectMQTT() {
-  while (!mqtt.connected()) {
-    Serial.print("[MQTT] Conectando ao broker ");
-    Serial.print(MQTT_BROKER);
-    Serial.print(":");
-    Serial.print(MQTT_PORT);
-    Serial.print(" ...");
+  int tentativa = 0;
 
-    if (mqtt.connect(MQTT_CLIENT_ID)) {
+  while (!mqtt.connected()) {
+    tentativa++;
+    Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    Serial.print("[MQTT] Tentativa #");
+    Serial.println(tentativa);
+    Serial.print("[MQTT] Broker   : ");
+    Serial.println(MQTT_BROKER);
+    Serial.print("[MQTT] Porta    : ");
+    Serial.println(MQTT_PORT);
+    Serial.print("[MQTT] ClientId : ");
+    Serial.println(MQTT_CLIENT_ID);
+    Serial.print("[MQTT] Username : ");
+    Serial.println(MQTT_USERNAME);
+    Serial.print("[MQTT] WillTopic: ");
+    Serial.println(TOPIC_DEVICE_STATUS);
+    Serial.println("[MQTT] Conectando...");
+
+    // Last Will: broker publica "offline" se o ESP32 cair sem desconectar
+    if (mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD, TOPIC_DEVICE_STATUS, 1, true, "offline")) {
       Serial.println(" ✅ Conectado!");
+
+      // Estado online (retain=true para observabilidade)
+      mqtt.publish(TOPIC_DEVICE_STATUS, "online", true);
 
       // Assinar tópicos para receber respostas
       mqtt.subscribe(TOPIC_STATUS);
       Serial.print("[MQTT] Inscrito em: ");
       Serial.println(TOPIC_STATUS);
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     } else {
+      int rc = mqtt.state();
       Serial.print(" ❌ Falhou. rc=");
-      Serial.print(mqtt.state());
+      Serial.println(rc);
+      Serial.print("[MQTT] Diagnóstico rc=");
+      Serial.print(rc);
+      Serial.print(" -> ");
+      switch (rc) {
+        case -4:
+          Serial.println("Timeout de conexão");
+          break;
+        case -3:
+          Serial.println("Conexão perdida");
+          break;
+        case -2:
+          Serial.println("Falha de conexão de rede");
+          break;
+        case -1:
+          Serial.println("Cliente desconectado");
+          break;
+        case 1:
+          Serial.println("Protocolo MQTT incorreto");
+          break;
+        case 2:
+          Serial.println("Client ID rejeitado");
+          break;
+        case 3:
+          Serial.println("Servidor indisponível");
+          break;
+        case 4:
+          Serial.println("Usuário/senha incorretos");
+          break;
+        case 5:
+          Serial.println("Não autorizado (ACL/permissão)");
+          break;
+        default:
+          Serial.println("Erro desconhecido");
+          break;
+      }
       Serial.println(" | Tentando novamente em 3s...");
-      /*
-       * Códigos de erro do PubSubClient:
-       * -4 = Timeout de conexão
-       * -3 = Conexão recusada (broker não responde)
-       * -2 = Conexão recusada (cliente desconectado)
-       * -1 = Desconectado
-       *  1 = Versão de protocolo incorreta
-       *  2 = Client ID rejeitado
-       *  3 = Servidor indisponível
-       *  4 = Usuário/senha incorretos
-       *  5 = Não autorizado
-       */
+      Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
       delay(3000);
     }
   }
 }
 
 // ============================================================
+//  LEITURA DOS SENSORES NO MCP23017
+// ============================================================
+bool lerSensorOcupado(int vagaId) {
+  SensorMap map = SENSOR_MAP[vagaId - 1];
+  int raw = (map.mcpIndex == 0) ? mcp.digitalRead(map.pin) : mcp2.digitalRead(map.pin);
+  return SENSOR_ACTIVE_LOW ? (raw == LOW) : (raw == HIGH);
+}
+
+// ============================================================
 //  PUBLICAR STATUS DE UMA VAGA
 //  Lógica extraída do enviarVaga() do código HTTP anterior:
-//    vagaId  = 1, 2 ou 3
+//    vagaId  = 1..TOTAL_VAGAS
 //    ocupada = true → publica em parking/entry
 //    ocupada = false → publica em parking/exit
 // ============================================================
@@ -162,10 +250,17 @@ void enviarVaga(int vagaId, bool ocupada) {
   char buffer[200];
   serializeJson(doc, buffer);
 
-  // Escolhe tópico baseado no status — igual à lógica HTTP anterior
-  const char* topico = ocupada ? TOPIC_ENTRADA : TOPIC_SAIDA;
+  // Padrão oficial: parking/spots/{vagaId}
+  String topico = String(TOPIC_SPOT_BASE) + "/" + String(vagaId);
 
-  bool ok = mqtt.publish(topico, buffer);
+  // retain=true garante snapshot da última leitura por vaga
+  bool ok = mqtt.publish(topico.c_str(), buffer, true);
+
+  // Compatibilidade temporária com tópicos legados
+  if (ENABLE_LEGACY_TOPIC_MIRROR) {
+    const char* legacyTopic = ocupada ? TOPIC_ENTRADA : TOPIC_SAIDA;
+    mqtt.publish(legacyTopic, buffer, false);
+  }
 
   Serial.println("-------------------------------");
   Serial.print("[MQTT] Vaga ");
@@ -193,20 +288,49 @@ void setup() {
 
   connectWiFi();
 
+  Wire.begin(); // I2C padrão ESP32: SDA=21, SCL=22
+
+  if (!mcp.begin_I2C(MCP_ADDRESS_0)) {
+    Serial.println("[MCP23017 #0] ❌ Não encontrado em 0x20. Verifique SDA/SCL/VCC/GND/endereço.");
+    while (1) {
+      delay(1000);
+    }
+  }
+
+  if (!mcp2.begin_I2C(MCP_ADDRESS_1)) {
+    Serial.println("[MCP23017 #1] ❌ Não encontrado em 0x21. Verifique A0/A1/A2 e fiação I2C.");
+    while (1) {
+      delay(1000);
+    }
+  }
+
+  for (int i = 0; i < TOTAL_VAGAS; i++) {
+    SensorMap map = SENSOR_MAP[i];
+    if (map.mcpIndex == 0) {
+      mcp.pinMode(map.pin, INPUT_PULLUP);
+    } else {
+      mcp2.pinMode(map.pin, INPUT_PULLUP);
+    }
+  }
+
+  Serial.println("[MCP23017 #0] ✅ Inicializado em 0x20");
+  Serial.println("[MCP23017 #1] ✅ Inicializado em 0x21");
+  Serial.println("[Sensores] ✅ 22 entradas digitais configuradas");
+
   mqtt.setServer(MQTT_BROKER, MQTT_PORT);
   mqtt.setCallback(onMessageReceived);
 
   connectMQTT();
 
-  // Estado inicial das vagas — igual ao setup() do código HTTP anterior
+  // Estado inicial das vagas a partir da leitura real dos sensores
   Serial.println("=== Enviando estado inicial das vagas ===");
-  enviarVaga(1, true);  // ocupada
-  delay(1000);
-  enviarVaga(2, false); // livre
-  delay(1000);
-  enviarVaga(3, true);  // ocupada
+  for (int vagaId = 1; vagaId <= TOTAL_VAGAS; vagaId++) {
+    vagaOcupada[vagaId] = lerSensorOcupado(vagaId);
+    enviarVaga(vagaId, vagaOcupada[vagaId]);
+    delay(300);
+  }
 
-  Serial.println("[Sistema] Pronto! Alternando vaga 1 a cada 10 segundos...");
+  Serial.println("[Sistema] Pronto! Monitorando sensores via MCP23017...");
 }
 
 // ============================================================
@@ -228,14 +352,21 @@ void loop() {
   // Processa mensagens recebidas
   mqtt.loop();
 
-  // A cada PUBLISH_INTERVAL ms, alterna status da vaga 1 — igual ao loop() do código HTTP anterior
+  // A cada READ_INTERVAL, lê sensores no MCP e publica somente quando mudar
   unsigned long now = millis();
-  if (now - lastPublishTime >= PUBLISH_INTERVAL) {
-    lastPublishTime = now;
+  if (now - lastReadTime >= READ_INTERVAL) {
+    lastReadTime = now;
 
-    vagaOcupada[1] = !vagaOcupada[1]; // alterna vaga 1
-
-    Serial.println("\n=== Atualização periódica da Vaga 1 ===");
-    enviarVaga(1, vagaOcupada[1]);
+    for (int vagaId = 1; vagaId <= TOTAL_VAGAS; vagaId++) {
+      bool leituraAtual = lerSensorOcupado(vagaId);
+      if (leituraAtual != vagaOcupada[vagaId]) {
+        vagaOcupada[vagaId] = leituraAtual;
+        Serial.print("[Sensor] Mudança na vaga ");
+        Serial.print(vagaId);
+        Serial.print(" -> ");
+        Serial.println(leituraAtual ? "ocupada" : "livre");
+        enviarVaga(vagaId, leituraAtual);
+      }
+    }
   }
 }
