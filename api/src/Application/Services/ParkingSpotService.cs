@@ -3,6 +3,7 @@ using ParkingSystem.Application.Common;
 using ParkingSystem.Application.DTOs.ParkingSpot;
 using ParkingSystem.Application.Services.Interfaces;
 using ParkingSystem.Domain.Entities;
+using ParkingSystem.Domain.Enums;
 using ParkingSystem.Domain.Interfaces;
 
 namespace ParkingSystem.Application.Services;
@@ -35,6 +36,46 @@ public class ParkingSpotService : IParkingSpotService
 
         var lot = await _uow.ParkingLots.GetByIdAsync(spot.ParkingLotId);
         return ApiResponse<ParkingSpotResponseDto>.Ok(MapToDto(spot, lot?.Name ?? ""));
+    }
+
+    public async Task<ApiResponse<ParkingSpotResponseDto>> GetByLotAndSpotNumberAsync(Guid parkingLotId, string spotNumber)
+    {
+        var normalizedSpotNumber = spotNumber.Trim().PadLeft(3, '0');
+
+        var spot = await _uow.ParkingSpots
+            .FindAsync(x => x.ParkingLotId == parkingLotId && x.SpotNumber == normalizedSpotNumber && !x.IsDeleted);
+
+        var target = spot.FirstOrDefault();
+        if (target is null)
+            return ApiResponse<ParkingSpotResponseDto>.NotFound("Vaga não encontrada.");
+
+        var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
+        return ApiResponse<ParkingSpotResponseDto>.Ok(MapToDto(target, lot?.Name ?? ""));
+    }
+
+    public async Task<ApiResponse<ParkingSpotResponseDto>> UpdateStatusAsync(Guid parkingLotId, string spotNumber, ParkingSpotStatus status)
+    {
+        var normalizedSpotNumber = spotNumber.Trim().PadLeft(3, '0');
+
+        var spot = await _uow.ParkingSpots
+            .FindAsync(x => x.ParkingLotId == parkingLotId && x.SpotNumber == normalizedSpotNumber && !x.IsDeleted);
+
+        var target = spot.FirstOrDefault();
+        if (target is null)
+            return ApiResponse<ParkingSpotResponseDto>.NotFound("Vaga não encontrada.");
+
+        if (target.Status != status)
+        {
+            target.Status = status;
+            target.UpdatedAt = DateTime.UtcNow;
+            _uow.ParkingSpots.Update(target);
+            await _uow.CommitAsync();
+
+            _logger.LogInformation("Status da vaga {SpotNumber} atualizado para {Status}", normalizedSpotNumber, status);
+        }
+
+        var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
+        return ApiResponse<ParkingSpotResponseDto>.Ok(MapToDto(target, lot?.Name ?? ""));
     }
 
     public async Task<ApiResponse<ParkingSpotResponseDto>> CreateAsync(CreateParkingSpotDto request)

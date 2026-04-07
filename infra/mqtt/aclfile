@@ -1,0 +1,9 @@
+# Permissões MQTT por tópico para o usuário do sistema de estacionamento
+user parking_iot
+
+topic readwrite parking/spots/#
+topic readwrite parking/entry
+topic readwrite parking/exit
+topic readwrite parking/status
+topic readwrite parking/device/#
+topic read $SYS/#

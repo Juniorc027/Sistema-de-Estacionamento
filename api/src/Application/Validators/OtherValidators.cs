@@ -9,7 +9,11 @@ public class CreateParkingSpotValidator : AbstractValidator<CreateParkingSpotDto
 {
     public CreateParkingSpotValidator()
     {
-        RuleFor(x => x.SpotNumber).NotEmpty().MaximumLength(10);
+        RuleFor(x => x.SpotNumber)
+            .NotEmpty()
+            .Matches(@"^(00[1-9]|0[1][0-9]|02[0-2])$")
+            .WithMessage("SpotNumber deve estar entre 001 e 022.");
+
         RuleFor(x => x.ParkingLotId).NotEmpty();
     }
 }

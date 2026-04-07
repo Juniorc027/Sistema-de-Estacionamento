@@ -117,6 +117,7 @@ try
     app.UseAuthorization();
     app.MapControllers();
     app.MapHub<ParkingSystem.API.Hubs.ParkingHub>("/hubs/parking"); // SignalR Hub
+    app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
     // Run DB migrations + seed data
     await DataSeeder.SeedAsync(app.Services);

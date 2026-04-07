@@ -24,6 +24,7 @@ export interface ParkingSpot {
 
 // Evento SignalR do backend
 export interface SpotUpdatedEvent {
+  parkingLotId: string;
   spotId: string;
   spotNumber: string;
   status: ParkingSpotStatus;

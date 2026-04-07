@@ -8,6 +8,9 @@ namespace ParkingSystem.Infrastructure.Data;
 
 public static class DataSeeder
 {
+    private static readonly Guid DevelopmentParkingLotId = Guid.Parse("45fc18f2-bdd8-4b11-b964-f8face1147f0");
+    private const int TotalSeedSpots = 22;
+
     public static async Task SeedAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -35,31 +38,53 @@ public static class DataSeeder
                 logger.LogInformation("Usuário admin padrão criado: admin@parkingsystem.com / Admin@123");
             }
 
-            if (!await context.ParkingLots.AnyAsync())
+            var lot = await context.ParkingLots
+                .Include(x => x.ParkingSpots)
+                .FirstOrDefaultAsync(x => x.Id == DevelopmentParkingLotId);
+
+            if (lot == null)
             {
-                var lot = new ParkingLot
+                lot = new ParkingLot
                 {
+                    Id = DevelopmentParkingLotId,
                     Name = "Estacionamento Central",
                     Address = "Rua Principal, 100 - Centro",
-                    TotalSpots = 20,
+                    TotalSpots = TotalSeedSpots,
                     HourlyRate = 5.00m,
                     IsActive = true
                 };
 
-                for (int i = 1; i <= lot.TotalSpots; i++)
+                context.ParkingLots.Add(lot);
+            }
+            else
+            {
+                lot.TotalSpots = TotalSeedSpots;
+                lot.IsActive = true;
+                lot.UpdatedAt = DateTime.UtcNow;
+            }
+
+            var existingSpots = lot.ParkingSpots
+                .Where(x => !x.IsDeleted)
+                .Select(x => x.SpotNumber)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 1; i <= TotalSeedSpots; i++)
+            {
+                var spotNumber = i.ToString("D3");
+                if (existingSpots.Contains(spotNumber))
                 {
-                    lot.ParkingSpots.Add(new ParkingSpot
-                    {
-                        SpotNumber = i.ToString("D3"),
-                        ParkingLotId = lot.Id
-                    });
+                    continue;
                 }
 
-                context.ParkingLots.Add(lot);
-                await context.SaveChangesAsync();
-
-                logger.LogInformation("Estacionamento inicial criado com {Total} vagas", lot.TotalSpots);
+                lot.ParkingSpots.Add(new ParkingSpot
+                {
+                    SpotNumber = spotNumber,
+                    ParkingLotId = lot.Id
+                });
             }
+
+            await context.SaveChangesAsync();
+            logger.LogInformation("Estacionamento {LotId} sincronizado com {Total} vagas", lot.Id, TotalSeedSpots);
         }
         catch (Exception ex)
         {
