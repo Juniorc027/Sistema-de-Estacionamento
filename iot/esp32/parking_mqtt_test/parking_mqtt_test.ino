@@ -46,8 +46,8 @@ const bool ENABLE_LEGACY_TOPIC_MIRROR = false;
 // ID do estacionamento (Estacionamento Central — vindo do banco)
 const char* PARKING_LOT_ID = "45fc18f2-bdd8-4b11-b964-f8face1147f0";
 
-// Total de vagas (22 sensores digitais D0)
-const int TOTAL_VAGAS = 22;
+// Total de vagas (20 sensores digitais D0)
+const int TOTAL_VAGAS = 20;
 
 // Dois MCP23017 no mesmo barramento I2C
 // MCP #0: A2 A1 A0 = 000 -> 0x20
@@ -60,14 +60,14 @@ struct SensorMap {
   uint8_t pin;      // 0..15 (GPA0..GPA7=0..7, GPB0..GPB7=8..15)
 };
 
-// Mapeamento padrão para 22 sensores:
+// Mapeamento padrão para 20 sensores:
 // Vagas 1..16  -> MCP 0 (pinos 0..15)
-// Vagas 17..22 -> MCP 1 (pinos 0..5)
+// Vagas 17..20 -> MCP 1 (pinos 0..3)
 const SensorMap SENSOR_MAP[TOTAL_VAGAS] = {
   {0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4},
   {0, 5}, {0, 6}, {0, 7}, {0, 8}, {0, 9},
   {0,10}, {0,11}, {0,12}, {0,13}, {0,14},
-  {0,15}, {1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}
+  {0,15}, {1, 0}, {1, 1}, {1, 2}, {1, 3}
 };
 
 // Lógica do sensor IR digital (D0)

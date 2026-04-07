@@ -11,7 +11,7 @@
  * │                                              │
  * │            ═══ corredor ═══                  │  5 unidades livres
  * │                                              │
- * │ [15] [16] [17] [18] [19] [20] [21] [22]     │  z = +10
+ * │      [15] [16] [17] [18] [19] [20]          │  z = +10
  * │ ENTRADA →                                    │
  * └──────────────────────────────────────────────┘
  *
@@ -35,7 +35,7 @@ import { ParkingRow } from './ParkingRow';
 const ROW_CONFIG = [
   { name: 'top',    numSpots: 6,  z: -10, face: 'south' as const },
   { name: 'middle', numSpots: 8,  z:   0, face: 'south' as const },
-  { name: 'bottom', numSpots: 8,  z:  10, face: 'north' as const },
+  { name: 'bottom', numSpots: 6,  z:  10, face: 'north' as const },
 ];
 
 /**
@@ -264,7 +264,7 @@ export function ParkingLot({ spots }: ParkingLotProps) {
    * Ordena por spotNumber numérico e fatia:
    *   0–5   → top    (6)   IDs 1-6
    *   6–13  → middle (8)   IDs 7-14
-    *   14–21 → bottom (8)   IDs 15-22
+    *   14–19 → bottom (6)   IDs 15-20
    */
   const rows = useMemo(() => {
     const sorted = [...spots].sort(

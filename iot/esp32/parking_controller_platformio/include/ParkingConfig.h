@@ -3,16 +3,16 @@
 #include <Arduino.h>
 
 // ====== Capacidade ======
-static constexpr uint8_t TOTAL_SPOTS = 22;
+static constexpr uint8_t TOTAL_SPOTS = 20;  // Apenas 20 sensores
 static constexpr bool SENSOR_ACTIVE_LOW = true; // true: LOW = ocupado
 
 // ====== MCP23017 ======
 static constexpr uint8_t MCP1_ADDR = 0x20;
 static constexpr uint8_t MCP2_ADDR = 0x21;
 
-// Mapeamento de 22 vagas:
+// Mapeamento de 20 vagas:
 // - Vagas 1..16  -> MCP1 pinos 0..15
-// - Vagas 17..22 -> MCP2 pinos 0..5
+// - Vagas 17..20 -> MCP2 pinos 0..3
 struct SpotMap {
   uint8_t mcpIndex; // 0 ou 1
   uint8_t pin;      // 0..15
@@ -21,7 +21,7 @@ struct SpotMap {
 static constexpr SpotMap SPOT_MAP[TOTAL_SPOTS] = {
   {0, 0}, {0, 1}, {0, 2}, {0, 3}, {0, 4}, {0, 5}, {0, 6}, {0, 7},
   {0, 8}, {0, 9}, {0, 10}, {0, 11}, {0, 12}, {0, 13}, {0, 14}, {0, 15},
-  {1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}
+  {1, 0}, {1, 1}, {1, 2}, {1, 3}
 };
 
 // ====== Sensores de cancela (opcional já pronto) ======

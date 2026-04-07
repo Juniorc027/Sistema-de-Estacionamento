@@ -1,34 +1,51 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { BarChart3, Clock, History, LayoutDashboard, Trophy } from 'lucide-react';
-import { useMemo, useState } from 'react';
-
-export type ReportId = 'history' | 'hourly-occupancy' | 'average-duration' | 'spot-ranking';
+import { BarChart3, LayoutDashboard, Activity, Shield, History } from 'lucide-react';
+import { useState } from 'react';
+import { PanelId } from '@/types/parking';
 
 type SidebarProps = {
-  selectedReport: ReportId | null;
-  onSelectReport: (reportId: ReportId) => void;
+  activePanel: PanelId | null;
+  onSelectPanel: (panelId: PanelId) => void;
 };
 
-type MenuItem = {
-  id: ReportId;
+interface NavItem {
+  id: PanelId;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
+  icon: React.ReactNode;
+  description?: string;
+}
 
-export function Sidebar({ selectedReport, onSelectReport }: SidebarProps) {
+const navItems: NavItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    icon: <LayoutDashboard className="w-5 h-5" />,
+    description: 'Visão Geral em tempo real',
+  },
+  {
+    id: 'occupancy',
+    label: 'Gestão de Fluxo',
+    icon: <Activity className="w-5 h-5" />,
+    description: 'Ocupação e Tempo Médio',
+  },
+  {
+    id: 'ranking',
+    label: 'Auditoria de Vagas',
+    icon: <Shield className="w-5 h-5" />,
+    description: 'Ranking de uso das vagas',
+  },
+  {
+    id: 'history',
+    label: 'Log de Eventos',
+    icon: <History className="w-5 h-5" />,
+    description: 'Histórico bruto de eventos',
+  },
+];
+
+export function Sidebar({ activePanel, onSelectPanel }: SidebarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-
-  const menuItems = useMemo<MenuItem[]>(
-    () => [
-      { id: 'history', label: 'Histórico Completo', icon: History },
-      { id: 'hourly-occupancy', label: 'Ocupação por Hora', icon: BarChart3 },
-      { id: 'average-duration', label: 'Tempo Médio de Permanência', icon: Clock },
-      { id: 'spot-ranking', label: 'Ranking de Vagas', icon: Trophy }
-    ],
-    []
-  );
 
   return (
     <motion.aside
@@ -40,6 +57,7 @@ export function Sidebar({ selectedReport, onSelectReport }: SidebarProps) {
       className="h-full bg-zinc-900 border-r border-zinc-800 shadow-2xl overflow-hidden"
     >
       <div className="h-full flex flex-col p-3">
+        {/* Logo/Brand */}
         <div className="h-12 flex items-center gap-3 px-2 rounded-lg text-white">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
             <LayoutDashboard className="w-5 h-5" />
@@ -47,34 +65,39 @@ export function Sidebar({ selectedReport, onSelectReport }: SidebarProps) {
           {isExpanded && <span className="font-semibold tracking-wide whitespace-nowrap">Estacionamento</span>}
         </div>
 
-        <div className="mt-8">
-          {isExpanded && (
-            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">RELATÓRIOS</p>
-          )}
+        {/* Navigation */}
+        <nav className="mt-8 flex-1 flex flex-col gap-2">
+          {navItems.map((item) => (
+            <motion.button
+              key={item.id}
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.98 }}
+              type="button"
+              onClick={() => onSelectPanel(item.id)}
+              className={`w-full h-11 rounded-lg flex items-center gap-3 px-2 transition-all duration-200 font-medium ${
+                activePanel === item.id
+                  ? 'bg-gradient-to-r from-emerald-500/30 to-emerald-500/10 text-emerald-300 border border-emerald-500/50 shadow-lg shadow-emerald-500/20'
+                  : 'text-zinc-300 hover:bg-zinc-800/80 hover:text-white border border-transparent hover:border-zinc-700'
+              }`}
+              title={item.description}
+            >
+              <div className="flex-shrink-0">{item.icon}</div>
+              {isExpanded && <span className="text-sm whitespace-nowrap text-left">{item.label}</span>}
+            </motion.button>
+          ))}
+        </nav>
 
-          <nav className="space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = selectedReport === item.id;
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectReport(item.id)}
-                  className={`w-full h-11 rounded-lg flex items-center gap-3 px-2 transition-all duration-200 ${
-                    isActive
-                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                      : 'text-zinc-300 hover:bg-zinc-800/80 hover:text-white border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {isExpanded && <span className="text-sm whitespace-nowrap text-left">{item.label}</span>}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+        {/* Footer Info */}
+        {isExpanded && activePanel && (
+          <div className="mt-auto pt-4 px-2 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400 mb-1">
+              Ativo
+            </p>
+            <p className="text-xs text-emerald-400">
+              {navItems.find(item => item.id === activePanel)?.label}
+            </p>
+          </div>
+        )}
       </div>
     </motion.aside>
   );
