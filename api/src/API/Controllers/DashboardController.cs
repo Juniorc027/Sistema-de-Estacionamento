@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ParkingSystem.Application.DTOs.Dashboard;
 using ParkingSystem.Application.Services.Interfaces;
-using System;
 using System.Threading.Tasks;
 
 namespace ParkingSystem.API.Controllers;

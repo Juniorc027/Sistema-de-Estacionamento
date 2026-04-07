@@ -13,6 +13,3 @@ public record ParkingSpotResponseDto(
     string ParkingLotName,
     DateTime CreatedAt);
 
-public record OccupySpotRequestDto(Guid ParkingLotId);
-
-public record ReleaseSpotRequestDto(string? Notes);
