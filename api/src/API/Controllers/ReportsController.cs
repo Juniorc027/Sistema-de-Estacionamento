@@ -11,10 +11,12 @@ namespace ParkingSystem.API.Controllers;
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _service;
+    private readonly IDashboardService _dashboardService;
 
-    public ReportsController(IReportService service)
+    public ReportsController(IReportService service, IDashboardService dashboardService)
     {
         _service = service;
+        _dashboardService = dashboardService;
     }
 
     /// <summary>Relatório diário (JSON)</summary>
@@ -69,5 +71,110 @@ public class ReportsController : ControllerBase
     {
         var pdfBytes = await _service.GenerateMonthlyReportPdfAsync(parkingLotId, year, month);
         return File(pdfBytes, "application/pdf", $"relatorio-mensal-{year}-{month:D2}.pdf");
+    }
+
+    // ===== NOVOS ENDPOINTS PARA DASHBOARD =====
+
+    /// <summary>Histórico de entradas/saídas com paginação</summary>
+    [HttpGet("history")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetHistory(
+        [FromQuery] Guid parkingLotId,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        var filter = new ReportFilter(
+            ParkingLotId: parkingLotId,
+            DateFrom: dateFrom ?? DateTime.Now.AddDays(-7),
+            DateTo: dateTo ?? DateTime.Now,
+            Page: page,
+            PageSize: pageSize
+        );
+
+        var result = await _service.GetHistoryAsync(filter);
+        return Ok(result);
+    }
+
+    /// <summary>Ocupação agregada por hora</summary>
+    [HttpGet("hourly-occupancy")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetHourlyOccupancy(
+        [FromQuery] Guid parkingLotId,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null)
+    {
+        var filter = new ReportFilter(
+            ParkingLotId: parkingLotId,
+            DateFrom: dateFrom ?? DateTime.Now.Date,
+            DateTo: dateTo ?? DateTime.Now,
+            Page: 1,
+            PageSize: 1000
+        );
+
+        var result = await _service.GetHourlyOccupancyAsync(filter);
+        return Ok(result);
+    }
+
+    /// <summary>Estatísticas de duração média</summary>
+    [HttpGet("average-duration")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetAverageDuration(
+        [FromQuery] Guid parkingLotId,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null)
+    {
+        var filter = new ReportFilter(
+            ParkingLotId: parkingLotId,
+            DateFrom: dateFrom ?? DateTime.Now.AddDays(-30),
+            DateTo: dateTo ?? DateTime.Now,
+            Page: 1,
+            PageSize: 1000
+        );
+
+        var result = await _service.GetAverageDurationAsync(filter);
+        return Ok(result);
+    }
+
+    /// <summary>Ranking de vagas por usando</summary>
+    [HttpGet("spot-ranking")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetSpotRanking(
+        [FromQuery] Guid parkingLotId,
+        [FromQuery] DateTime? dateFrom = null,
+        [FromQuery] DateTime? dateTo = null)
+    {
+        var filter = new ReportFilter(
+            ParkingLotId: parkingLotId,
+            DateFrom: dateFrom ?? DateTime.Now.AddDays(-30),
+            DateTo: dateTo ?? DateTime.Now,
+            Page: 1,
+            PageSize: 1000
+        );
+
+        var result = await _service.GetSpotRankingAsync(filter);
+        return Ok(result);
+    }
+
+    /// <summary>Exporta relatório de sessões em CSV</summary>
+    [HttpGet("export")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExportSessions(
+        [FromQuery] Guid parkingLotId,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null)
+    {
+        try
+        {
+            var csvBytes = await _dashboardService.ExportSessionsAsCsvAsync(parkingLotId, from, to);
+            
+            var fileName = $"relatorio-sessoes-{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv";
+            return File(csvBytes, "text/csv", fileName);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = "Erro ao exportar relatório.", error = ex.Message });
+        }
     }
 }

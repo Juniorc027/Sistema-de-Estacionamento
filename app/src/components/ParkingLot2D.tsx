@@ -52,7 +52,7 @@ export default function ParkingLot2D({
 
   const row1 = sorted.filter((spot) => spot.id >= 1 && spot.id <= 6);
   const row2 = sorted.filter((spot) => spot.id >= 7 && spot.id <= 14);
-  const row3 = sorted.filter((spot) => spot.id >= 15 && spot.id <= 22);
+  const row3 = sorted.filter((spot) => spot.id >= 15 && spot.id <= 20);
 
   const renderRow = (row: Parking2DSpot[], expectedCount: number) => {
     if (row.length === 0) {
@@ -100,7 +100,7 @@ export default function ParkingLot2D({
       <div className="space-y-4">
         {renderRow(row1, 6)}
         {renderRow(row2, 8)}
-        {renderRow(row3, 8)}
+        {renderRow(row3, 6)}
       </div>
     </section>
   );

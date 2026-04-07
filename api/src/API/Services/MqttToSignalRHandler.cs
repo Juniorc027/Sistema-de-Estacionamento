@@ -20,15 +20,21 @@ public class MqttToSignalRHandler : IMqttMessageHandler
         _logger = logger;
     }
 
+    /// <summary>
+    /// Processa mensagem MQTT, atualiza status da vaga no BD e gerencia sessões
+    /// </summary>
+
     public async Task HandleAsync(string topic, string payload)
     {
         try
         {
-            _logger.LogInformation("[MqttHandler] Processing: {Topic} -> {Payload}", topic, payload);
+            _logger.LogInformation("[MQTT] ========== Processing: {Topic} ==========", topic);
+            _logger.LogInformation("[MQTT] Payload: {Payload}", payload);
 
             using var scope = _services.CreateScope();
             var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ParkingHub>>();
             var spotService = scope.ServiceProvider.GetRequiredService<IParkingSpotService>();
+            var sessionService = scope.ServiceProvider.GetRequiredService<ISessionManagementService>();
 
             var mqttMessage = JsonSerializer.Deserialize<MqttSpotMessage>(payload, new JsonSerializerOptions
             {
@@ -58,6 +64,13 @@ public class MqttToSignalRHandler : IMqttMessageHandler
             var newStatus = ResolveStatus(topic, mqttMessage);
             var spotNumber = vagaId.Value.ToString("D3");
 
+            // Busca status anterior
+            var getResult = await spotService.GetByLotAndSpotNumberAsync(parkingLotId, spotNumber);
+            var oldStatus = getResult.Success && getResult.Data != null
+                ? getResult.Data.Status
+                : ParkingSpotStatus.Free;
+
+            // Atualiza status no BD
             var updateResult = await spotService.UpdateStatusAsync(parkingLotId, spotNumber, newStatus);
             if (!updateResult.Success || updateResult.Data is null)
             {
@@ -66,6 +79,19 @@ public class MqttToSignalRHandler : IMqttMessageHandler
             }
 
             var updatedSpot = updateResult.Data;
+
+            // Gerencia sessões (detecta transições Free ↔ Occupied)
+            _logger.LogInformation("[MQTT] Status transition for spot {Spot}: {OldStatus} → {NewStatus}", spotNumber, oldStatus, newStatus);
+            await sessionService.HandleSpotStatusChangeAsync(
+                updatedSpot.Id,
+                parkingLotId,
+                spotNumber,
+                oldStatus,
+                newStatus
+            );
+            _logger.LogInformation("[MQTT] Session management completed for spot {Spot}", spotNumber);
+
+            // Broadcast SignalR
             var spotUpdated = new SpotUpdatedDto(
                 ParkingLotId: updatedSpot.ParkingLotId,
                 SpotId: updatedSpot.Id,
@@ -78,10 +104,11 @@ public class MqttToSignalRHandler : IMqttMessageHandler
                 .Group(ParkingHub.BuildParkingLotGroup(updatedSpot.ParkingLotId))
                 .SendAsync("SpotUpdated", spotUpdated);
 
-            _logger.LogInformation("[MqttHandler] Spot updated and broadcasted: lot {Lot} spot {Spot} -> {Status}",
+            _logger.LogInformation("[MqttHandler] Spot updated and broadcasted: lot {Lot} spot {Spot} -> {Status} (from {OldStatus})",
                 updatedSpot.ParkingLotId,
                 updatedSpot.SpotNumber,
-                updatedSpot.Status);
+                updatedSpot.Status,
+                oldStatus);
         }
         catch (Exception ex)
         {

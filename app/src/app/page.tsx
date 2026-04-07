@@ -4,9 +4,10 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiService } from '../services/api';
 import { useSignalR } from '../hooks/useSignalR';
-import { ParkingSpot, ParkingSpotStatus, SpotUpdatedEvent } from '../types/parking';
-import { Sidebar, ReportId } from '../components/ui/Sidebar';
+import { ParkingSpot, ParkingSpotStatus, SpotUpdatedEvent, PanelId, ReportId } from '../types/parking';
+import { Sidebar } from '../components/ui/Sidebar';
 import { ReportPanel } from '../components/ui/ReportPanel';
+import { DashboardPanel } from '../components/ui/DashboardPanel';
 
 const ParkingLot = dynamic(
   () => import('../components/parking/ParkingLot').then((mod) => mod.ParkingLot),
@@ -31,7 +32,7 @@ export default function Home() {
   const [spots, setSpots] = useState<ParkingSpot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedReport, setSelectedReport] = useState<ReportId | null>(null);
+  const [activePanel, setActivePanel] = useState<PanelId>('dashboard');
 
   useEffect(() => {
     async function loadInitialSpots() {
@@ -70,12 +71,9 @@ export default function Home() {
 
   const { isConnected, error: signalRError } = useSignalR(handleSpotUpdated, PARKING_LOT_ID);
 
-  const handleSelectReport = useCallback((reportId: ReportId) => {
-    setSelectedReport(reportId);
-  }, []);
-
-  const handleCloseReport = useCallback(() => {
-    setSelectedReport(null);
+  const handleSelectPanel = useCallback((panelId: PanelId) => {
+    console.log(`[Home] Panel selected: ${panelId}`);
+    setActivePanel(panelId);
   }, []);
 
   if (loading) {
@@ -97,10 +95,39 @@ export default function Home() {
     );
   }
 
+  // Determinar se renderizar condicional (Dashboard vs ReportPanel)
+  const isReportActive = activePanel !== 'dashboard';
+  const reportId = isReportActive ? (activePanel as ReportId) : null;
+
   return (
-    <main className="w-full h-screen bg-gray-900 relative">
+    <main className="w-full h-screen bg-gray-900 relative overflow-hidden">
+      {/* Left Sidebar - Navigation Menu */}
       <div className="absolute inset-y-0 left-0 z-20">
-        <Sidebar selectedReport={selectedReport} onSelectReport={handleSelectReport} />
+        <Sidebar activePanel={activePanel} onSelectPanel={handleSelectPanel} />
+      </div>
+
+      {/* Right Panel - Conditional Rendering */}
+      <div className="absolute inset-y-0 right-0 z-20">
+        {activePanel === 'dashboard' ? (
+          /* Dashboard Tab */
+          <DashboardPanel 
+            parkingLotId={PARKING_LOT_ID}
+            onSpotClick={(spotId, spotNumber) => {
+              console.log(`[Home] Spot clicked from dashboard: ${spotNumber} (${spotId})`);
+              // Futuramente: focar câmera 3D na vaga
+            }}
+          />
+        ) : (
+          /* Report Tab */
+          <ReportPanel 
+            reportId={reportId} 
+            parkingLotId={PARKING_LOT_ID} 
+            onClose={() => {
+              console.log('[Home] Report closed, returning to dashboard');
+              setActivePanel('dashboard');
+            }} 
+          />
+        )}
       </div>
 
       {/* Status bar overlay */}
@@ -118,12 +145,10 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Visualização 3D */}
-      <div className={`w-full h-full transition-opacity duration-300 ${selectedReport ? 'opacity-75' : 'opacity-100'}`}>
+      {/* 3D Visualization - Center */}
+      <div className={`w-full h-full transition-opacity duration-300 ${isReportActive ? 'opacity-75' : 'opacity-100'}`}>
         <ParkingLot spots={spots} />
       </div>
-
-      <ReportPanel reportId={selectedReport} onClose={handleCloseReport} />
     </main>
   );
 }

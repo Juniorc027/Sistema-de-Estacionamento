@@ -9,7 +9,9 @@ namespace ParkingSystem.Infrastructure.Data;
 public static class DataSeeder
 {
     private static readonly Guid DevelopmentParkingLotId = Guid.Parse("45fc18f2-bdd8-4b11-b964-f8face1147f0");
-    private const int TotalSeedSpots = 22;
+    private const int TotalSeedSpots = 20;
+
+    private static string NormalizeSpotNumber(string value) => value.Trim().PadLeft(3, '0');
 
     public static async Task SeedAsync(IServiceProvider services)
     {
@@ -65,8 +67,26 @@ public static class DataSeeder
 
             var existingSpots = lot.ParkingSpots
                 .Where(x => !x.IsDeleted)
-                .Select(x => x.SpotNumber)
+                .Select(x => NormalizeSpotNumber(x.SpotNumber))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var allowedSpots = Enumerable.Range(1, TotalSeedSpots)
+                .Select(i => i.ToString("D3"))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Soft-delete any extra spots beyond the desired layout (e.g., 021, 022)
+            // This keeps historical sessions intact but prevents them from appearing via query filters.
+            foreach (var extraSpot in lot.ParkingSpots.Where(x => !x.IsDeleted))
+            {
+                var normalized = NormalizeSpotNumber(extraSpot.SpotNumber);
+                if (allowedSpots.Contains(normalized))
+                {
+                    continue;
+                }
+
+                extraSpot.IsDeleted = true;
+                extraSpot.UpdatedAt = DateTime.UtcNow;
+            }
 
             for (int i = 1; i <= TotalSeedSpots; i++)
             {

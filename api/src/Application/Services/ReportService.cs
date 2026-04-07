@@ -93,7 +93,7 @@ public class ReportService : IReportService
     public async Task<ApiResponse<IEnumerable<SessionReportItemDto>>> GetSessionsReportAsync(ReportFilterDto filter)
     {
         var sessions = await _uow.ParkingSessions.GetByPeriodAsync(filter.ParkingLotId, filter.From, filter.To);
-        var query = sessions.AsQueryable();
+        var query = sessions.ToList().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filter.Status) && Enum.TryParse<SessionStatus>(filter.Status, out var status))
             query = query.Where(s => s.Status == status);
@@ -111,13 +111,14 @@ public class ReportService : IReportService
         }
 
         var sessionList2 = query.ToList();
+        var spotId = sessionList2.FirstOrDefault()?.ParkingSpotId ?? Guid.Empty;
         var result = sessionList2.Select(s => new SessionReportItemDto(
             s.Id,
             s.VehicleEntry != null ? s.VehicleEntry.LicensePlate : "",
             s.ParkingSpot != null ? s.ParkingSpot.SpotNumber : "",
             s.StartTime, s.EndTime,
             s.Duration.HasValue ? s.Duration.Value.TotalMinutes : (double?)null, s.TotalAmount,
-            s.Status.ToString()));
+            s.Status.ToString())).ToList();
 
         return ApiResponse<IEnumerable<SessionReportItemDto>>.Ok(result);
     }
@@ -263,5 +264,277 @@ public class ReportService : IReportService
                 });
             });
         }).GeneratePdf();
+    }
+
+    // ===== NOVOS MÉTODOS PARA DASHBOARD =====
+
+    public async Task<PagedResult<HistoryReportDto>> GetHistoryAsync(ReportFilter filter)
+    {
+        try
+        {
+            _logger.LogInformation("[Reports] GetHistory: parkingLotId={LotId}, from={From}, to={To}, page={Page}, pageSize={PageSize}",
+                filter.ParkingLotId, filter.DateFrom, filter.DateTo, filter.Page, filter.PageSize);
+            
+            if (!filter.ParkingLotId.HasValue)
+            {
+                _logger.LogWarning("[Reports] GetHistory: parkingLotId is null");
+                return new PagedResult<HistoryReportDto> { Items = new(), TotalCount = 0, CurrentPage = filter.Page, PageSize = filter.PageSize, TotalPages = 0 };
+            }
+
+            var from = filter.DateFrom;
+            var to = filter.DateTo.AddDays(1).AddTicks(-1);
+
+            var sessions = await _uow.ParkingSessions.GetByPeriodAsync(filter.ParkingLotId.Value, from, to);
+            var allSessions = sessions.ToList();
+            
+            _logger.LogInformation("[Reports] GetHistory: Found {Count} sessions (Active + Completed)", allSessions.Count);
+            foreach (var s in allSessions.Take(5))
+                _logger.LogInformation("[Reports]   - Session: id={SessionId}, spot={Spot}, status={Status}, start={Start}, end={End}",
+                    s.Id, s.ParkingSpot?.SpotNumber ?? "?", s.Status, s.StartTime, s.EndTime);
+
+            var totalCount = allSessions.Count;
+
+            var skip = (filter.Page - 1) * filter.PageSize;
+            var pagedSessions = allSessions
+                .OrderByDescending(s => s.StartTime)
+                .Skip(skip)
+                .Take(filter.PageSize)
+                .ToList();
+
+            var items = pagedSessions.Select(s => new HistoryReportDto(
+                SessionId: s.Id,
+                SpotId: s.ParkingSpotId,
+                SpotNumber: s.ParkingSpot?.SpotNumber ?? "N/A",
+                LicensePlate: s.VehicleEntry?.LicensePlate ?? "UNKNOWN",
+                EntryTime: s.StartTime,
+                ExitTime: s.EndTime,
+                Duration: s.Duration,
+                Amount: s.TotalAmount ?? 0m,
+                ParkingLotName: s.ParkingSpot?.ParkingLot?.Name ?? "Unknown"
+            )).ToList();
+
+            var result = new PagedResult<HistoryReportDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                CurrentPage = filter.Page,
+                PageSize = filter.PageSize,
+                TotalPages = (int)Math.Ceiling((double)totalCount / filter.PageSize)
+            };
+
+            _logger.LogInformation("[Reports] GetHistory: Returning {ItemCount}/{TotalCount} items (page {Page}/{TotalPages})",
+                items.Count, totalCount, filter.Page, result.TotalPages);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter histórico de relatórios");
+            return new PagedResult<HistoryReportDto> 
+            { 
+                Items = new(), 
+                TotalCount = 0, 
+                CurrentPage = filter.Page, 
+                PageSize = filter.PageSize,
+                TotalPages = 0 
+            };
+        }
+    }
+
+    public async Task<List<HourlyOccupancyDto>> GetHourlyOccupancyAsync(ReportFilter filter)
+    {
+        try
+        {
+            _logger.LogInformation("[Reports] GetHourlyOccupancy: parkingLotId={LotId}, from={From}, to={To}",
+                filter.ParkingLotId, filter.DateFrom, filter.DateTo);
+            
+            if (!filter.ParkingLotId.HasValue)
+            {
+                _logger.LogWarning("[Reports] GetHourlyOccupancy: parkingLotId is null");
+                return new List<HourlyOccupancyDto>();
+            }
+
+            var from = filter.DateFrom;
+            var to = filter.DateTo.AddDays(1).AddTicks(-1);
+
+            var sessions = await _uow.ParkingSessions.GetByPeriodAsync(filter.ParkingLotId.Value, from, to);
+            var allSessions = sessions.ToList();
+            _logger.LogInformation("[Reports] GetHourlyOccupancy: Found {Count} sessions", allSessions.Count);
+
+            var lot = await _uow.ParkingLots.GetByIdAsync(filter.ParkingLotId.Value);
+            var totalSpots = lot?.TotalSpots ?? 1;
+
+            var result = new List<HourlyOccupancyDto>();
+
+            for (int hour = 0; hour < 24; hour++)
+            {
+                var sessionsInHour = allSessions.Where(s =>
+                    s.StartTime.Hour <= hour && 
+                    (s.EndTime == null || s.EndTime.Value.Hour >= hour)
+                ).ToList();
+
+                var peakOccupied = sessionsInHour.Count;
+                var occupancyRate = totalSpots > 0 ? ((decimal)peakOccupied / totalSpots) * 100 : 0;
+
+                result.Add(new HourlyOccupancyDto(
+                    Hour: filter.DateFrom.AddHours(hour),
+                    AverageOccupancy: occupancyRate,
+                    PeakOccupiedCount: peakOccupied,
+                    TotalSpots: totalSpots
+                ));
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter ocupação por hora");
+            return new List<HourlyOccupancyDto>();
+        }
+    }
+
+    public async Task<AverageDurationReportDto> GetAverageDurationAsync(ReportFilter filter)
+    {
+        try
+        {
+            _logger.LogInformation("[Reports] GetAverageDuration: parkingLotId={LotId}, from={From}, to={To}",
+                filter.ParkingLotId, filter.DateFrom, filter.DateTo);
+            
+            if (!filter.ParkingLotId.HasValue)
+            {
+                _logger.LogWarning("[Reports] GetAverageDuration: parkingLotId is null");
+                return new AverageDurationReportDto(0, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0);
+            }
+
+            var from = filter.DateFrom;
+            var to = filter.DateTo.AddDays(1).AddTicks(-1);
+
+            var sessions = await _uow.ParkingSessions.GetByPeriodAsync(filter.ParkingLotId.Value, from, to);
+            var allSessions = sessions.ToList();
+            _logger.LogInformation("[Reports] GetAverageDuration: Found {AllCount} total sessions", allSessions.Count);
+            
+            var completedSessions = allSessions.Where(s => s.Duration.HasValue).ToList();
+            _logger.LogInformation("[Reports] GetAverageDuration: {CompletedCount} sessions with Duration (Completed)", completedSessions.Count);
+
+            var totalSessions = completedSessions.Count;
+
+            if (totalSessions == 0)
+            {
+                return new AverageDurationReportDto(
+                    TotalSessions: 0,
+                    AverageDuration: TimeSpan.Zero,
+                    MinimumDuration: TimeSpan.Zero,
+                    MaximumDuration: TimeSpan.Zero,
+                    SessionsToday: 0,
+                    SessionsThisWeek: 0,
+                    SessionsThisMonth: 0
+                );
+            }
+
+            var durations = completedSessions.Select(s => s.Duration.Value).ToList();
+            var totalMilliseconds = durations.Sum(d => (long)d.TotalMilliseconds);
+            var avgMilliseconds = totalMilliseconds / (long)durations.Count;
+            var avgTimestamp = new TimeSpan(avgMilliseconds * 10000);
+            var minDuration = durations.Min();
+            var maxDuration = durations.Max();
+
+            var today = DateTime.Now.Date;
+            var sessionsToday = allSessions.Count(s => s.StartTime.Date == today);
+
+            var weekStart = today.AddDays(-(int)today.DayOfWeek);
+            var sessionsWeek = allSessions.Count(s => 
+                s.StartTime >= weekStart && s.StartTime < weekStart.AddDays(7)
+            );
+
+            var monthStart = new DateTime(today.Year, today.Month, 1);
+            var sessionsMonth = allSessions.Count(s =>
+                s.StartTime >= monthStart && s.StartTime < monthStart.AddMonths(1)
+            );
+
+            return new AverageDurationReportDto(
+                TotalSessions: totalSessions,
+                AverageDuration: avgTimestamp,
+                MinimumDuration: minDuration,
+                MaximumDuration: maxDuration,
+                SessionsToday: sessionsToday,
+                SessionsThisWeek: sessionsWeek,
+                SessionsThisMonth: sessionsMonth
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter duração média");
+            return new AverageDurationReportDto(0, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0);
+        }
+    }
+
+    public async Task<List<SpotRankingDto>> GetSpotRankingAsync(ReportFilter filter)
+    {
+        try
+        {
+            _logger.LogInformation("[Reports] GetSpotRanking: parkingLotId={LotId}, from={From}, to={To}",
+                filter.ParkingLotId, filter.DateFrom, filter.DateTo);
+            
+            if (!filter.ParkingLotId.HasValue)
+            {
+                _logger.LogWarning("[Reports] GetSpotRanking: parkingLotId is null");
+                return new List<SpotRankingDto>();
+            }
+
+            var from = filter.DateFrom;
+            var to = filter.DateTo.AddDays(1).AddTicks(-1);
+
+            var sessions = await _uow.ParkingSessions.GetByPeriodAsync(filter.ParkingLotId.Value, from, to);
+            var allSessions = sessions.ToList();
+            _logger.LogInformation("[Reports] GetSpotRanking: Found {Count} sessions (all spots combined)", allSessions.Count);
+
+            var allSpots = await _uow.ParkingSpots.GetAllAsync();
+            var spotsInLot = allSpots.Where(s => s.ParkingLotId == filter.ParkingLotId.Value).ToList();
+
+            var lot = await _uow.ParkingLots.GetByIdAsync(filter.ParkingLotId.Value);
+            var totalSpots = lot?.TotalSpots ?? spotsInLot.Count;
+
+            var result = new List<SpotRankingDto>();
+
+            foreach (var spot in spotsInLot.OrderBy(s => s.SpotNumber))
+            {
+                var spotSessions = allSessions.Where(s => s.ParkingSpotId == spot.Id).ToList();
+                var useCount = spotSessions.Count;
+                
+                if (useCount > 0)
+                    _logger.LogInformation("[Reports]   Spot {Spot}: {UseCount} sessions", spot.SpotNumber, useCount);
+
+                decimal avgDurationMinutes = 0;
+                var withDuration = spotSessions.Where(s => s.Duration.HasValue).ToList();
+                if (withDuration.Any())
+                {
+                    var durations = withDuration.Select(s => s.Duration.Value.TotalMinutes).ToList();
+                    avgDurationMinutes = (decimal)durations.Average();
+                }
+
+                var totalDuration = withDuration.Sum(s => s.Duration.Value.TotalHours);
+
+                var occupancyRate = totalSpots > 0 
+                    ? (decimal)(totalDuration / ((to - from).TotalHours * totalSpots)) * 100 
+                    : 0;
+
+                result.Add(new SpotRankingDto(
+                    SpotNumber: spot.SpotNumber,
+                    UseCount: useCount,
+                    AverageDurationMinutes: avgDurationMinutes,
+                    OccupancyRate: occupancyRate,
+                    Status: spot.Status.ToString()
+                ));
+            }
+
+            var ordered = result.OrderByDescending(r => r.UseCount).ToList();
+            _logger.LogInformation("[Reports] GetSpotRanking: Returning {Count} spots (top 3: {Top3})",
+                ordered.Count, string.Join(", ", ordered.Take(3).Select(r => $"{r.SpotNumber}({r.UseCount}x)")));
+            return ordered;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao obter ranking de vagas");
+            return new List<SpotRankingDto>();
+        }
     }
 }
