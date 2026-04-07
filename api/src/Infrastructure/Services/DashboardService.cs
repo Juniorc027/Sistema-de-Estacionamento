@@ -416,6 +416,165 @@ public class DashboardService : IDashboardService
     }
 
     /// <summary>
+    /// RecomputeOverviewForRealTimeUpdateAsync: Recomputa apenas o overview para atualização real-time via SignalR
+    /// Chamado pelo MqttToSignalRHandler após entrada/saída de veículo
+    /// Versão otimizada que atualiza apenas campos críticos
+    /// </summary>
+    public async Task<DashboardOverviewDto> RecomputeOverviewForRealTimeUpdateAsync(Guid parkingLotId)
+    {
+        try
+        {
+            _logger.LogInformation("[Dashboard RT] Recomputing overview for real-time update: {ParkingLotId}", parkingLotId);
+
+            // Validar parking lot existe
+            var parkingLot = await _context.ParkingLots
+                .FirstOrDefaultAsync(p => p.Id == parkingLotId);
+
+            if (parkingLot == null)
+            {
+                _logger.LogWarning("[Dashboard RT] Parking lot not found: {ParkingLotId}", parkingLotId);
+                return null;
+            }
+
+            // ===== OCUPAÇÃO ATUAL (CAMPO CRÍTICO) =====
+            var totalSpots = await _context.ParkingSpots
+                .CountAsync(s => s.ParkingLotId == parkingLotId);
+
+            var occupiedSpots = await _context.ParkingSessions
+                .CountAsync(s => s.ParkingSpot.ParkingLotId == parkingLotId && s.EndTime == null);
+
+            var occupancyPercentage = totalSpots > 0 
+                ? (decimal)occupiedSpots / totalSpots * 100 
+                : 0;
+
+            var occupancyStatus = occupancyPercentage switch
+            {
+                >= 90 => "Alto",
+                >= 60 => "Normal",
+                _ => "Baixo"
+            };
+
+            // ===== GIRO DE VAGAS - ÚLTIMAS 24H =====
+            var last24Hours = DateTime.UtcNow.AddDays(-1);
+            var sessions24h = await _context.ParkingSessions
+                .Where(s => s.ParkingSpot.ParkingLotId == parkingLotId && s.StartTime >= last24Hours)
+                .ToListAsync();
+
+            var entries24h = sessions24h.Count(s => s.StartTime >= last24Hours);
+            var exits24h = sessions24h.Count(s => s.EndTime.HasValue && s.EndTime >= last24Hours);
+            var avgEntriesPerHour = entries24h / 24m;
+            var peakEntriesInHour = sessions24h
+                .GroupBy(s => s.StartTime.Hour)
+                .DefaultIfEmpty()
+                .Max(g => g?.Count() ?? 0);
+
+            // ===== HORÁRIO DE PICO - HOJE =====
+            var todayStart = DateTime.UtcNow.Date;
+            var todayEnd = todayStart.AddDays(1);
+
+            var peakHourGroup = sessions24h
+                .Where(s => s.StartTime >= todayStart && s.StartTime < todayEnd)
+                .GroupBy(s => s.StartTime.Hour)
+                .OrderByDescending(g => g.Count())
+                .FirstOrDefault();
+
+            var peakHour = new PeakHourDto
+            {
+                Hour = peakHourGroup?.Key ?? DateTime.UtcNow.Hour,
+                EntriesCount = peakHourGroup?.Count() ?? 0,
+                OccupancyPercentage = (peakHourGroup?.Count() ?? 0) * 100m / Math.Max(1, totalSpots)
+            };
+
+            // ===== RANKING TOP 5 (RECOMPUTA RAPIDAMENTE) =====
+            var spotStats = await _context.ParkingSessions
+                .Where(s => s.ParkingSpot.ParkingLotId == parkingLotId)
+                .GroupBy(s => s.ParkingSpotId)
+                .Select(g => new
+                {
+                    SpotId = g.Key,
+                    EntryCount = g.Count(),
+                    Sessions = g.Where(x => x.EndTime.HasValue).ToList()
+                })
+                .OrderByDescending(x => x.EntryCount)
+                .Take(5)
+                .ToListAsync();
+
+            var topSpots = new List<SpotRankingItemDto>();
+            for (int i = 0; i < spotStats.Count; i++)
+            {
+                var stat = spotStats[i];
+                var spot = await _context.ParkingSpots
+                    .FirstOrDefaultAsync(s => s.Id == stat.SpotId);
+
+                if (spot != null)
+                {
+                    var avgDurationMinutes = stat.Sessions.Count > 0
+                        ? stat.Sessions.Average(x => (x.EndTime!.Value - x.StartTime).TotalMinutes)
+                        : 0;
+
+                    var utilizationRate = avgDurationMinutes > 0 
+                        ? (stat.EntryCount * avgDurationMinutes) / (24 * 60) 
+                        : 0;
+
+                    string badge = i switch
+                    {
+                        0 => "🔥",
+                        <= 2 => "⭐",
+                        _ => ""
+                    };
+
+                    topSpots.Add(new SpotRankingItemDto
+                    {
+                        Rank = i + 1,
+                        SpotId = stat.SpotId,
+                        SpotNumber = spot.SpotNumber,
+                        EntryCount = stat.EntryCount,
+                        AverageOccupancyMinutes = (decimal)avgDurationMinutes,
+                        UtilizationRate = Math.Min(100, (decimal)utilizationRate),
+                        CurrentStatus = FormatSpotStatus(spot.Status),
+                        Badge = badge
+                    });
+                }
+            }
+
+            _logger.LogInformation("[Dashboard RT] Real-time overview recomputed successfully. Occupied: {Occupied}/{Total} ({Percentage}%)",
+                occupiedSpots, totalSpots, occupancyPercentage.ToString("F1"));
+
+            return new DashboardOverviewDto
+            {
+                ParkingLotId = parkingLotId,
+                ParkingLotName = parkingLot.Name,
+                
+                Occupancy = new OccupancyMetricDto
+                {
+                    OccupancyPercentage = occupancyPercentage,
+                    OccupiedSpots = occupiedSpots,
+                    TotalSpots = totalSpots,
+                    TrendPercentage = 0,
+                    OccupancyStatus = occupancyStatus
+                },
+                
+                Throughput = new VehicleThroughputDto
+                {
+                    EntriesLast24Hours = entries24h,
+                    ExitsLast24Hours = exits24h,
+                    AverageEntriesPerHour = avgEntriesPerHour,
+                    PeakEntriesInOneHour = peakEntriesInHour
+                },
+                
+                PeakHour = peakHour,
+                TopSpots = topSpots,
+                LastUpdated = DateTime.UtcNow
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Dashboard RT] Error recomputing overview for real-time update");
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Formatador auxiliar para status de vaga
     /// </summary>
     private static string FormatSpotStatus(ParkingSpotStatus status)

@@ -2,7 +2,7 @@
  * SignalR Service  
  */
 import * as signalR from '@microsoft/signalr';
-import { SpotUpdatedEvent } from '../types/parking';
+import { SpotUpdatedEvent, DashboardOverviewDto } from '../types/parking';
 
 const HUB_URL = process.env.NEXT_PUBLIC_SIGNALR_URL || 'http://localhost:5167/hubs/parking';
 
@@ -49,9 +49,19 @@ export class SignalRService {
     this.joinedParkingLotId = parkingLotId;
   }
 
+  // ✅ NOVO: Listener para atualizações do mapa 2D
   onSpotUpdated(callback: (event: SpotUpdatedEvent) => void): void {
     if (!this.connection) throw new Error('Not connected');
     this.connection.on('SpotUpdated', callback);
+  }
+
+  // ✅ NOVO: Listener para atualizações silenciosas do Dashboard (KPIs + Ranking)
+  onUpdateDashboardStats(callback: (stats: DashboardOverviewDto) => void): void {
+    if (!this.connection) throw new Error('Not connected');
+    this.connection.on('UpdateDashboardStats', (data: DashboardOverviewDto) => {
+      console.log('[SignalR] Dashboard stats updated:', data);
+      callback(data);
+    });
   }
 
   off(eventName: string): void {

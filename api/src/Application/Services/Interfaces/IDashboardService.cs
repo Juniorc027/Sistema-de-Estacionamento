@@ -30,4 +30,10 @@ public interface IDashboardService
     /// ExportSessionsAsCsvAsync: Exporta sessões em CSV
     /// </summary>
     Task<byte[]> ExportSessionsAsCsvAsync(Guid parkingLotId, DateTime? from = null, DateTime? to = null);
+
+    /// <summary>
+    /// RecomputeOverviewForRealTimeUpdateAsync: Recomputa overview para atualização real-time via SignalR
+    /// Chamado após mudanças via MQTT (entrada/saída de veículo)
+    /// </summary>
+    Task<DashboardOverviewDto> RecomputeOverviewForRealTimeUpdateAsync(Guid parkingLotId);
 }

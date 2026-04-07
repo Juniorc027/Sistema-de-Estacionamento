@@ -35,6 +35,7 @@ public class MqttToSignalRHandler : IMqttMessageHandler
             var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ParkingHub>>();
             var spotService = scope.ServiceProvider.GetRequiredService<IParkingSpotService>();
             var sessionService = scope.ServiceProvider.GetRequiredService<ISessionManagementService>();
+            var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
 
             var mqttMessage = JsonSerializer.Deserialize<MqttSpotMessage>(payload, new JsonSerializerOptions
             {
@@ -91,7 +92,7 @@ public class MqttToSignalRHandler : IMqttMessageHandler
             );
             _logger.LogInformation("[MQTT] Session management completed for spot {Spot}", spotNumber);
 
-            // Broadcast SignalR
+            // Broadcast SpotUpdated (para o mapa 2D)
             var spotUpdated = new SpotUpdatedDto(
                 ParkingLotId: updatedSpot.ParkingLotId,
                 SpotId: updatedSpot.Id,
@@ -109,6 +110,37 @@ public class MqttToSignalRHandler : IMqttMessageHandler
                 updatedSpot.SpotNumber,
                 updatedSpot.Status,
                 oldStatus);
+
+            // ========== NOVO: Atualizar Dashboard em TEMPO REAL ==========
+            // Só dispara o broadcast se houve mudança real (entry/exit)
+            if (oldStatus != newStatus)
+            {
+                try
+                {
+                    _logger.LogInformation("[Dashboard RT] Real-time update triggered for lot {Lot} (entry/exit event)", parkingLotId);
+
+                    // Recomputa o overview com os dados atualizados
+                    var updatedOverview = await dashboardService.RecomputeOverviewForRealTimeUpdateAsync(parkingLotId);
+
+                    if (updatedOverview != null)
+                    {
+                        // Envia para todos os clientes do grupo
+                        await hubContext.Clients
+                            .Group(ParkingHub.BuildParkingLotGroup(parkingLotId))
+                            .SendAsync("UpdateDashboardStats", updatedOverview);
+
+                        _logger.LogInformation("[Dashboard RT] Broadcast sent: Occupancy={Occupancy}% ({Occupied}/{Total})",
+                            updatedOverview.Occupancy.OccupancyPercentage.ToString("F1"),
+                            updatedOverview.Occupancy.OccupiedSpots,
+                            updatedOverview.Occupancy.TotalSpots);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[Dashboard RT] Error broadcasting dashboard update");
+                    // Não falha o handler se o dashboard broadcast falhar
+                }
+            }
         }
         catch (Exception ex)
         {

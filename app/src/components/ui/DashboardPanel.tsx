@@ -5,6 +5,7 @@ import { ChevronDown, TrendingUp, TrendingDown, Users, Clock, AlertCircle } from
 import { useCallback, useEffect, useState } from 'react';
 import { TimePeriod, DashboardOverviewDto, SpotRankingItemDto } from '@/types/parking';
 import { ApiService } from '@/services/api';
+import { signalRService } from '@/services/signalr';
 
 // ============= TIPOS LOCAIS =============
 
@@ -229,6 +230,45 @@ export function DashboardPanel({ parkingLotId, onSpotClick }: DashboardPanelProp
 
     loadData();
   }, [parkingLotId]);
+
+  // ✅ NOVO: Listener silencioso para atualizações em tempo real via SignalR
+  // (não mostrar loading spinner, apenas atualizar os valores)
+  useEffect(() => {
+    if (!dashboardData) {
+      // Só ativa listener após dados iniciais
+      return;
+    }
+
+    console.log('[DashboardPanel] Setting up real-time listener');
+
+    const handleDashboardUpdate = (updatedOverview: DashboardOverviewDto) => {
+      console.log('[DashboardPanel] Received UpdateDashboardStats event:', updatedOverview);
+
+      // Validar que é do mesmo parking lot
+      if (updatedOverview.parkingLotId !== parkingLotId) {
+        return;
+      }
+
+      // Atualiza silenciosamente (sem spinner, sem feedback visual agressivo)
+      // Apenas a data de "last updated" muda visualmente
+      setDashboardData(updatedOverview);
+      setTopSpots(updatedOverview.topSpots || []);
+
+      console.log('[DashboardPanel] Silent update complete. Occupancy: %d%%', 
+        updatedOverview.occupancy.occupancyPercentage);
+    };
+
+    try {
+      signalRService.onUpdateDashboardStats(handleDashboardUpdate);
+    } catch (error) {
+      console.error('[DashboardPanel] Error setting up listener:', error);
+    }
+
+    // Cleanup: remover listener ao desmontar
+    return () => {
+      signalRService.off('UpdateDashboardStats');
+    };
+  }, [parkingLotId, dashboardData?.parkingLotId]);
 
   const handleSpotClick = useCallback(
     (spotId: string, spotNumber: string) => {
