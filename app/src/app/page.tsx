@@ -4,19 +4,34 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiService } from '../services/api';
 import { useSignalR } from '../hooks/useSignalR';
-import { ParkingSpot, SpotUpdatedEvent } from '../types/parking';
+import { ParkingSpot, ParkingSpotStatus, SpotUpdatedEvent } from '../types/parking';
+import { Sidebar, ReportId } from '../components/ui/Sidebar';
+import { ReportPanel } from '../components/ui/ReportPanel';
 
-const ParkingLot3D = dynamic(
-  () => import('../components/ParkingLot3D').then((mod) => mod.ParkingLot3D),
+const ParkingLot = dynamic(
+  () => import('../components/parking/ParkingLot').then((mod) => mod.ParkingLot),
   { ssr: false }
 );
 
 const PARKING_LOT_ID = '45fc18f2-bdd8-4b11-b964-f8face1147f0';
 
+function normalizeStatusValue(value: number | string): ParkingSpotStatus {
+  if (typeof value === 'number') {
+    return value as ParkingSpotStatus;
+  }
+
+  const normalized = value.toLowerCase();
+  if (normalized === 'occupied' || normalized === 'ocupada') return ParkingSpotStatus.Occupied;
+  if (normalized === 'reserved' || normalized === 'reservada') return ParkingSpotStatus.Reserved;
+  if (normalized === 'maintenance' || normalized === 'manutencao') return ParkingSpotStatus.Maintenance;
+  return ParkingSpotStatus.Free;
+}
+
 export default function Home() {
   const [spots, setSpots] = useState<ParkingSpot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedReport, setSelectedReport] = useState<ReportId | null>(null);
 
   useEffect(() => {
     async function loadInitialSpots() {
@@ -36,17 +51,32 @@ export default function Home() {
 
   const handleSpotUpdated = useCallback((event: SpotUpdatedEvent) => {
     console.log('[Home] SpotUpdated event received:', event);
+
+    if (event.parkingLotId !== PARKING_LOT_ID) {
+      return;
+    }
+
+    const normalizedStatus = normalizeStatusValue(event.status);
+
     setSpots((prevSpots) => {
       return prevSpots.map((spot) => {
         if (spot.spotNumber === event.spotNumber) {
-          return { ...spot, status: event.status };
+          return { ...spot, status: normalizedStatus };
         }
         return spot;
       });
     });
   }, []);
 
-  const { isConnected, error: signalRError } = useSignalR(handleSpotUpdated);
+  const { isConnected, error: signalRError } = useSignalR(handleSpotUpdated, PARKING_LOT_ID);
+
+  const handleSelectReport = useCallback((reportId: ReportId) => {
+    setSelectedReport(reportId);
+  }, []);
+
+  const handleCloseReport = useCallback(() => {
+    setSelectedReport(null);
+  }, []);
 
   if (loading) {
     return (
@@ -69,6 +99,10 @@ export default function Home() {
 
   return (
     <main className="w-full h-screen bg-gray-900 relative">
+      <div className="absolute inset-y-0 left-0 z-20">
+        <Sidebar selectedReport={selectedReport} onSelectReport={handleSelectReport} />
+      </div>
+
       {/* Status bar overlay */}
       <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-10">
         <div className="bg-gray-800/90 p-4 rounded-lg">
@@ -85,7 +119,11 @@ export default function Home() {
       </div>
 
       {/* Visualização 3D */}
-      <ParkingLot3D spots={spots} />
+      <div className={`w-full h-full transition-opacity duration-300 ${selectedReport ? 'opacity-75' : 'opacity-100'}`}>
+        <ParkingLot spots={spots} />
+      </div>
+
+      <ReportPanel reportId={selectedReport} onClose={handleCloseReport} />
     </main>
   );
 }

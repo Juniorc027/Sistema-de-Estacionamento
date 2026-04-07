@@ -8,17 +8,45 @@ const HUB_URL = process.env.NEXT_PUBLIC_SIGNALR_URL || 'http://localhost:5167/hu
 
 export class SignalRService {
   private connection: signalR.HubConnection | null = null;
+  private joinedParkingLotId: string | null = null;
 
   async start(): Promise<void> {
-    if (this.connection) return;
+    if (this.connection) {
+      if (this.connection.state === signalR.HubConnectionState.Connected) {
+        return;
+      }
+
+      if (this.connection.state === signalR.HubConnectionState.Connecting) {
+        return;
+      }
+    }
 
     this.connection = new signalR.HubConnectionBuilder()
       .withUrl(HUB_URL)
       .withAutomaticReconnect()
       .build();
 
+    this.connection.onreconnected(async () => {
+      if (this.joinedParkingLotId) {
+        await this.joinParkingLot(this.joinedParkingLotId);
+      }
+    });
+
     await this.connection.start();
     console.log('[SignalR] Connected');
+  }
+
+  async joinParkingLot(parkingLotId: string): Promise<void> {
+    if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+      throw new Error('Not connected');
+    }
+
+    if (this.joinedParkingLotId && this.joinedParkingLotId !== parkingLotId) {
+      await this.connection.invoke('LeaveParkingLot', this.joinedParkingLotId);
+    }
+
+    await this.connection.invoke('JoinParkingLot', parkingLotId);
+    this.joinedParkingLotId = parkingLotId;
   }
 
   onSpotUpdated(callback: (event: SpotUpdatedEvent) => void): void {
@@ -28,6 +56,18 @@ export class SignalRService {
 
   off(eventName: string): void {
     this.connection?.off(eventName);
+  }
+
+  async stop(): Promise<void> {
+    if (!this.connection) {
+      return;
+    }
+
+    if (this.connection.state !== signalR.HubConnectionState.Disconnected) {
+      await this.connection.stop();
+    }
+
+    this.joinedParkingLotId = null;
   }
 }
 

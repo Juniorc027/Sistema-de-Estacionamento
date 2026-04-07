@@ -1,16 +1,16 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR;
 using ParkingSystem.API.Hubs;
 using ParkingSystem.Application.Services.Interfaces;
 using ParkingSystem.Domain.Enums;
-using System.Text.Json;
 
 namespace ParkingSystem.API.Services;
 
-/// <summary>
-/// Handler que processa mensagens MQTT e dispara eventos SignalR
-/// </summary>
 public class MqttToSignalRHandler : IMqttMessageHandler
 {
+    private static readonly Regex SpotTopicRegex = new("^parking/spots/(?<id>\\d+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly IServiceProvider _services;
     private readonly ILogger<MqttToSignalRHandler> _logger;
 
@@ -20,66 +20,116 @@ public class MqttToSignalRHandler : IMqttMessageHandler
         _logger = logger;
     }
 
-    /// <summary>
-    /// Processa mensagem MQTT e atualiza banco + SignalR
-    /// </summary>
     public async Task HandleAsync(string topic, string payload)
     {
         try
         {
             _logger.LogInformation("[MqttHandler] Processing: {Topic} -> {Payload}", topic, payload);
 
-            // Cria scope para acessar serviços scoped (DbContext)
             using var scope = _services.CreateScope();
             var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<ParkingHub>>();
             var spotService = scope.ServiceProvider.GetRequiredService<IParkingSpotService>();
 
-            // Parse do JSON do ESP32
-            var mqttMessage = JsonSerializer.Deserialize<MqttSpotMessage>(payload);
-            if (mqttMessage == null) return;
-
-            // Determina status baseado no tópico
-            var newStatus = topic switch
+            var mqttMessage = JsonSerializer.Deserialize<MqttSpotMessage>(payload, new JsonSerializerOptions
             {
-                "parking/entry" => ParkingSpotStatus.Occupied,
-                "parking/exit" => ParkingSpotStatus.Free,
-                _ => ParkingSpotStatus.Free
-            };
+                PropertyNameCaseInsensitive = true,
+            });
 
-            // Busca a vaga pelo número (spotNumber do ESP32 corresponde ao banco)
-            var spots = await spotService.GetByParkingLotAsync(mqttMessage.ParkingLotId);
-            var spot = spots.Data?.FirstOrDefault(s => s.SpotNumber == mqttMessage.VagaId.ToString("D3"));
-
-            if (spot == null)
+            if (mqttMessage == null)
             {
-                _logger.LogWarning("[MqttHandler] Spot not found: {SpotNumber}", mqttMessage.VagaId);
+                _logger.LogWarning("[MqttHandler] Invalid payload (null after deserialize)");
                 return;
             }
 
-            // TODO: Atualizar status da vaga no banco via service
-            // (Requer criar método UpdateStatusAsync no IParkingSpotService)
+            var parkingLotId = mqttMessage.ParkingLotId;
+            if (parkingLotId == Guid.Empty)
+            {
+                _logger.LogWarning("[MqttHandler] Missing parkingLotId in payload. Topic: {Topic}", topic);
+                return;
+            }
 
-            // Envia evento SignalR para todos os clientes
-            await hubContext.Clients.All.SendAsync("SpotUpdated", new SpotUpdatedDto(
-                SpotId: Guid.Parse(spot.Id.ToString()),
-                SpotNumber: spot.SpotNumber,
-                Status: newStatus,
+            var vagaId = ResolveVagaId(topic, mqttMessage);
+            if (vagaId is null or <= 0)
+            {
+                _logger.LogWarning("[MqttHandler] Could not resolve vagaId. Topic: {Topic}, Payload: {Payload}", topic, payload);
+                return;
+            }
+
+            var newStatus = ResolveStatus(topic, mqttMessage);
+            var spotNumber = vagaId.Value.ToString("D3");
+
+            var updateResult = await spotService.UpdateStatusAsync(parkingLotId, spotNumber, newStatus);
+            if (!updateResult.Success || updateResult.Data is null)
+            {
+                _logger.LogWarning("[MqttHandler] Spot update failed for lot {Lot} spot {Spot}: {Message}", parkingLotId, spotNumber, updateResult.Message);
+                return;
+            }
+
+            var updatedSpot = updateResult.Data;
+            var spotUpdated = new SpotUpdatedDto(
+                ParkingLotId: updatedSpot.ParkingLotId,
+                SpotId: updatedSpot.Id,
+                SpotNumber: updatedSpot.SpotNumber,
+                Status: updatedSpot.Status,
                 Timestamp: DateTime.UtcNow
-            ));
+            );
 
-            _logger.LogInformation("[MqttHandler] SignalR event sent for spot {Spot}", spot.SpotNumber);
+            await hubContext.Clients
+                .Group(ParkingHub.BuildParkingLotGroup(updatedSpot.ParkingLotId))
+                .SendAsync("SpotUpdated", spotUpdated);
+
+            _logger.LogInformation("[MqttHandler] Spot updated and broadcasted: lot {Lot} spot {Spot} -> {Status}",
+                updatedSpot.ParkingLotId,
+                updatedSpot.SpotNumber,
+                updatedSpot.Status);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[MqttHandler] Error processing MQTT message");
         }
     }
+
+    private static int? ResolveVagaId(string topic, MqttSpotMessage message)
+    {
+        var topicMatch = SpotTopicRegex.Match(topic);
+        if (topicMatch.Success && int.TryParse(topicMatch.Groups["id"].Value, out var spotIdFromTopic))
+        {
+            return spotIdFromTopic;
+        }
+
+        if (message.VagaId > 0)
+        {
+            return message.VagaId;
+        }
+
+        return null;
+    }
+
+    private static ParkingSpotStatus ResolveStatus(string topic, MqttSpotMessage message)
+    {
+        if (topic.Equals("parking/entry", StringComparison.OrdinalIgnoreCase))
+        {
+            return ParkingSpotStatus.Occupied;
+        }
+
+        if (topic.Equals("parking/exit", StringComparison.OrdinalIgnoreCase))
+        {
+            return ParkingSpotStatus.Free;
+        }
+
+        var normalized = (message.Status ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "ocupada" => ParkingSpotStatus.Occupied,
+            "occupied" => ParkingSpotStatus.Occupied,
+            "livre" => ParkingSpotStatus.Free,
+            "free" => ParkingSpotStatus.Free,
+            _ => ParkingSpotStatus.Free,
+        };
+    }
 }
 
-/// <summary>
-/// Estrutura da mensagem JSON enviada pelo ESP32
-/// </summary>
-public class MqttSpotMessage
+public sealed class MqttSpotMessage
 {
     public int VagaId { get; set; }
     public string Status { get; set; } = string.Empty;

@@ -36,6 +36,7 @@ cp .env.example .env
 ./scripts/dev-up.sh --no-cache   # rebuild sem cache
 ./scripts/rebuild-clean.sh       # rebuild forçado completo
 ./scripts/docker-clean-cache.sh  # limpar cache docker
+./scripts/smoke-test-iot.sh      # teste MQTT -> backend -> API
 docker compose logs -f           # ver logs
 docker compose down              # derrubar
 ```
