@@ -1,0 +1,62 @@
+# ============================================================
+#  Mosquitto Configuration — Eclipse Mosquitto 2.x
+#  ✅ VERSÃO CORRIGIDA PARA ACESSO REMOTO
+# ============================================================
+
+# ──────────────────────────────────────────────────────────
+#  Listener Principal (MQTT)
+# ──────────────────────────────────────────────────────────
+# Escuta em TODAS as interfaces (0.0.0.0) para aceitar
+# conexões de máquinas externas
+listener 1883
+protocol mqtt
+bind_address 0.0.0.0
+
+# ──────────────────────────────────────────────────────────
+#  Listener Alternativo (WebSocket)
+# ──────────────────────────────────────────────────────────
+# Para debug via navegador e frontend
+listener 9001
+protocol websockets
+bind_address 0.0.0.0
+
+# ──────────────────────────────────────────────────────────
+#  Segurança
+# ──────────────────────────────────────────────────────────
+allow_anonymous false
+password_file /mosquitto/config/passwordfile_local
+acl_file /mosquitto/config/aclfile
+
+# ──────────────────────────────────────────────────────────
+#  Persistência
+# ──────────────────────────────────────────────────────────
+# Garante que mensagens com retain=true persistem entre restarts
+persistence true
+persistence_location /mosquitto/data/
+
+# ──────────────────────────────────────────────────────────
+#  Logging
+# ──────────────────────────────────────────────────────────
+# Logs em stdout (docker logs) e arquivo
+log_dest stdout
+log_dest file /mosquitto/log/mosquitto.log
+log_type all
+log_timestamp true
+
+# ──────────────────────────────────────────────────────────
+#  Otimizações de Desempenho
+# ──────────────────────────────────────────────────────────
+# Keep alive para detectar desconexões
+max_keepalive_delay 60
+
+# Buffer de mensagens
+message_size_limit 0
+
+# Limite de conexões simultâneas (0 = ilimitado)
+max_connections -1
+
+# ──────────────────────────────────────────────────────────
+#  Qualidade de Serviço (QoS)
+# ──────────────────────────────────────────────────────────
+# Permitir QoS 0, 1, 2
+max_queued_messages 1000

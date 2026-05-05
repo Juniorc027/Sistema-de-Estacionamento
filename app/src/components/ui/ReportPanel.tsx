@@ -29,13 +29,13 @@ const reportTitles: Record<ReportId, string> = {
  * Função auxiliar para exportar relatório em CSV
  * Faz download do arquivo no browser
  */
-const handleExportCsv = async (reportId: ReportId, parkingLotId: string) => {
+const handleExportCsv = async (parkingLotId: string) => {
   try {
-    const blob = await ApiService.exportReportToCsv(reportId, parkingLotId);
+    const blob = await ApiService.exportReportToCsv(parkingLotId);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `relatorio-${reportId}-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `relatorio-estacionamento-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -389,7 +389,7 @@ export function ReportPanel({ reportId, parkingLotId, onClose }: ReportPanelProp
                 {/* Botão Exportar CSV */}
                 <button
                   type="button"
-                  onClick={() => activeTab && handleExportCsv(activeTab, parkingLotId)}
+                  onClick={() => handleExportCsv(parkingLotId)}
                   className="h-9 px-3 rounded-lg text-sm border border-blue-600/50 text-blue-300 hover:text-blue-200 hover:border-blue-500 hover:bg-blue-800/30 transition flex items-center gap-2"
                   title="Exportar relatório em CSV"
                 >

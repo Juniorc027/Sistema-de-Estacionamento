@@ -9,11 +9,13 @@
  *   - Laje colorida (corpo da vaga)
  *   - Linhas brancas de demarcação (esquerda, direita, fundo)
  *   - Esfera do sensor IR no lado fechado
+ *   - Número da vaga em texto 3D (branco com contorno, pintado no chão)
  */
 'use client';
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
 import { Color, MeshStandardMaterial } from 'three';
 import { ParkingSpotStatus } from '../../types/parking';
 
@@ -106,6 +108,21 @@ export function ParkingSpot({
           emissiveIntensity={1.2}
         />
       </mesh>
+
+      {/* ── Número da vaga (identificação visual) ── */}
+      <Text
+        position={[0, H + 0.1, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.5}
+        font={undefined}
+        color="#ffffff"
+        outlineWidth={0.02}
+        outlineColor="#000000"
+        anchorX="center"
+        anchorY="middle"
+      >
+        {spotNumber.padStart(2, '0')}
+      </Text>
     </group>
   );
 }
