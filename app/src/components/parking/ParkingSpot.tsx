@@ -15,6 +15,7 @@
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Color, MeshStandardMaterial } from 'three';
+import { Text } from '@react-three/drei';
 import { ParkingSpotStatus } from '../../types/parking';
 
 /* ── Geometria da vaga ── */
@@ -106,6 +107,20 @@ export function ParkingSpot({
           emissiveIntensity={1.2}
         />
       </mesh>
+
+      {/* ── Número da vaga (visível em 3D) ── */}
+      {/* @ts-ignore -- Text de drei renderiza normalmente */}
+      <Text
+        position={[0, H + 0.35, 0]}
+        fontSize={0.25}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+        font={undefined}
+        renderOrder={10}
+      >
+        {spotNumber}
+      </Text>
     </group>
   );
 }

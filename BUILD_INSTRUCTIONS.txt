@@ -1,0 +1,106 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║              INSTRUÇÕES PARA REBUILD — Erro TypeScript Resolvido          ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ O ERRO FOI CORRIGIDO:
+
+./src/hooks/useWebGLSupport.ts:38:9
+Type error: Type 'WebGLRenderingContext' is missing the following properties...
+
+→ SOLUÇÃO: Usar type union WebGL2RenderingContext | WebGLRenderingContext | null
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 REBUILD COMPLETO (Recomendado)
+
+$ docker-compose down -v
+$ docker builder prune -a
+$ docker-compose up --build
+
+Esperado:
+✓ Compiled successfully (sem erros TypeScript)
+✓ parking-frontend running
+✓ Acessar: http://localhost:3000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🧪 TESTE RÁPIDO (Antes do Docker)
+
+$ cd app
+$ npm install  # Se necessário
+$ npm run build
+
+Esperado:
+✓ Compiled successfully
+✓ Linting and checking validity of types...
+Ready in X.XXs
+
+→ Se passar, fazer docker-compose up --build
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 ARQUIVOS CORRIGIDOS:
+
+✅ app/src/hooks/useWebGLSupport.ts
+   - Type union correto
+   - Casting seguro com 'as any'
+   - Detecção de software renderer melhorada
+   - failIfMajorPerformanceCaveat: false
+
+✅ app/next.config.js
+   - transpilePackages correto
+   - Headers CORS para Docker
+   - Webpack rules para shaders
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ VALIDAÇÃO APÓS BUILD
+
+Abrir DevTools (F12) → Console → Procurar por:
+  [WebGL] ✅ Suporte detectado: { vendor: '...', renderer: '...', ... }
+
+Se ver isso, significa:
+✓ Build compilou sem erros TypeScript
+✓ WebGL foi detectado corretamente
+✓ Sistema está pronto para produção
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 DICAS SE AINDA HOUVER ERROS
+
+Se receber "Cannot find module 'three'":
+  $ cd app && npm install three @react-three/fiber @react-three/drei
+
+Se receber erro de TypeScript ainda:
+  $ docker builder prune -a
+  $ rm -rf app/.next app/node_modules/.cache
+  $ docker-compose build --no-cache frontend
+
+Se o Docker tiver problemas de memória:
+  Aumentar Docker Desktop → Resources → Memory para 4GB+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 DOCUMENTAÇÃO COMPLETA:
+
+Abrir: CORRECAO_TYPESCRIPT_WEBGL.md
+
+Inclui:
+- Explicação detalhada do erro
+- Arquivo completo corrigido
+- Instruções de rebuild
+- Teste de validação
+- Troubleshooting
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 RESUMO
+
+Erro: Type mismatch WebGL rendering context
+Causa: Type assertions incompatíveis entre WebGL1 e WebGL2
+Solução: Type union + casting seguro
+Status: ✅ RESOLVIDO
+
+Próximo passo: docker-compose up --build
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1,6 +1,7 @@
 # ============================================================
 #  Frontend Dockerfile — Next.js 14 (multi-stage)
 #  Context: ./app  (docker-compose build context)
+#  ✅ Otimizado para WebGL em Docker
 # ============================================================
 
 # ── Stage 1: Dependencies ──────────────────────────────────
@@ -26,6 +27,7 @@ ARG CACHEBUST=1
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_SIGNALR_URL=$NEXT_PUBLIC_SIGNALR_URL
+ENV NEXT_PUBLIC_ENABLE_WEBGL=true
 
 RUN npm run build
 
@@ -33,11 +35,12 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl ca-certificates
 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV NEXT_PUBLIC_ENABLE_WEBGL=true
 
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
