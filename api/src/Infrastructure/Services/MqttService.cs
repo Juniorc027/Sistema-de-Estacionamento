@@ -13,9 +13,12 @@ public class MqttService : IMqttService, IDisposable
 {
     private static readonly string[] SubscribedTopics =
     {
-        "parking/spots/+", // padrão oficial
-        "parking/entry",   // compatibilidade legada
-        "parking/exit"     // compatibilidade legada
+        "parking/spots",          // ✅ Snapshot de todas as vagas (ESP32 publica aqui)
+        "parking/spots/+",        // Para compatibilidade com vagas individuais
+        "parking/events",         // ✅ Eventos de entrada/saída (ESP32 publica aqui)
+        "parking/entry",          // Compatibilidade legada - Sensor IR entrada
+        "parking/exit",           // Compatibilidade legada - Sensor IR saída
+        "parking/device/+/status" // Status dos dispositivos IoT
     };
 
     private readonly IMqttClient _mqttClient;
@@ -189,17 +192,42 @@ public class MqttService : IMqttService, IDisposable
 
     private async Task SubscribeTopicsAsync()
     {
+        _logger.LogInformation("\n[MQTT Service] ╔═══════════════════════════════════════════════════════════════════════════════════╗");
+        _logger.LogInformation("[MQTT Service] ║  SUBSCRIBING TO MQTT TOPICS - Processing                                      ║");
+        _logger.LogInformation("[MQTT Service] ╚═══════════════════════════════════════════════════════════════════════════════════╝");
+
+        var successCount = 0;
+        var failedTopics = new List<string>();
+
         foreach (var topic in SubscribedTopics)
         {
-            var filter = new MqttTopicFilterBuilder()
-                .WithTopic(topic)
-                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
-                .Build();
+            try
+            {
+                var filter = new MqttTopicFilterBuilder()
+                    .WithTopic(topic)
+                    .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                    .Build();
 
-            await _mqttClient.SubscribeAsync(filter);
+                await _mqttClient.SubscribeAsync(filter);
+                successCount++;
+                _logger.LogInformation("[MQTT Service]  ✅ {Topic}", topic);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("[MQTT Service]  ❌ {Topic} - {Error}", topic, ex.Message);
+                failedTopics.Add(topic);
+            }
         }
 
-        _logger.LogInformation("MQTT subscribed to: {Topics}", string.Join(", ", SubscribedTopics));
+        _logger.LogInformation("[MQTT Service] ════════════════════════════════════════════════════════════════════════════════════");
+        _logger.LogInformation("[MQTT Service] 🎉 SUBSCRIPTION COMPLETE: {Success}/{Total} topics subscribed successfully", successCount, SubscribedTopics.Length);
+        
+        if (failedTopics.Count > 0)
+        {
+            _logger.LogWarning("[MQTT Service] ⚠️  Failed topics: {Topics}", string.Join(", ", failedTopics));
+        }
+
+        _logger.LogInformation("[MQTT Service] ════════════════════════════════════════════════════════════════════════════════════\n");
     }
 
     private async Task HandleMessageAsync(MqttApplicationMessageReceivedEventArgs args)
@@ -207,13 +235,27 @@ public class MqttService : IMqttService, IDisposable
         var topic = args.ApplicationMessage.Topic;
         var payload = Encoding.UTF8.GetString(args.ApplicationMessage.PayloadSegment);
 
-        _logger.LogInformation("MQTT mensagem recebida: {Topic} -> {Payload}", topic, payload);
+        _logger.LogDebug("[MQTT Service] 📨 Message received: {Topic}", topic);
+        _logger.LogDebug("[MQTT Service]    Payload length: {Length} bytes", args.ApplicationMessage.PayloadSegment.Count);
 
         using var scope = _services.CreateScope();
         var handler = scope.ServiceProvider.GetService<IMqttMessageHandler>();
         if (handler != null)
         {
-            await handler.HandleAsync(topic, payload);
+            try
+            {
+                _logger.LogDebug("[MQTT Service]    Delegating to IMqttMessageHandler");
+                await handler.HandleAsync(topic, payload);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[MQTT Service] ❌ Error in message handler for topic: {Topic}", topic);
+                throw;
+            }
+        }
+        else
+        {
+            _logger.LogWarning("[MQTT Service] ⚠️  No IMqttMessageHandler service available");
         }
     }
 

@@ -1,52 +1,244 @@
 #!/bin/bash
 
 # ============================================================
-#  Smart Gate Control — MQTT Test Script
+#  Script de Teste Manual — Simular Entrada/Saída MQTT
 # ============================================================
+#  Usa: mosquitto_pub para simular sensores IR de cancelas
 #
-# Este script automatiza testes via MQTT sem a necessidade
-# de usar o Dashboard. Útil para validação rápida.
-#
-# USO:
-#   chmod +x mqtt-test-gates.sh
-#   ./mqtt-test-gates.sh
-#
+#  Uso: ./mqtt-test-gates.sh <broker> <port>
+#  Ex:  ./mqtt-test-gates.sh 192.168.0.10 1883
 # ============================================================
 
-set -e
+BROKER="${1:-192.168.0.10}"
+PORT="${2:-1883}"
+USERNAME="parking_iot"
+PASSWORD="ParkingIot@2026"
+CLIENT_ID="mqtt-test-script-$(date +%s)"
 
-# Configurações
-MQTT_BROKER="192.168.0.10"
-MQTT_PORT="1883"
-TOPIC_SNAPSHOT="parking/spots/snapshot"
-TOPIC_ENTRY="parking/entry"
-TOPIC_EXIT="parking/exit"
+# ID do estacionamento (deve coincidir com o backend)
 PARKING_LOT_ID="45fc18f2-bdd8-4b11-b964-f8face1147f0"
 
-# Cores
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+echo "════════════════════════════════════════════════════════"
+echo "  TESTE MQTT — Sensores de Entrada/Saída (CORRIGIDO)"
+echo "════════════════════════════════════════════════════════"
+echo ""
+echo "Configuração:"
+echo "  Broker: $BROKER"
+echo "  Porta: $PORT"
+echo "  Username: $USERNAME"
+echo "  Parking Lot ID: $PARKING_LOT_ID"
+echo ""
+echo "════════════════════════════════════════════════════════"
+echo ""
 
-# ============================================================
-# FUNÇÕES
-# ============================================================
-
-print_header() {
-    echo -e "${BLUE}════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}$1${NC}"
-    echo -e "${BLUE}════════════════════════════════════════════════${NC}"
+# Função para testar MQTT
+test_mqtt_connection() {
+  echo "[TESTE] Verificando conexão MQTT..."
+  
+  # Tenta publicar uma mensagem de teste
+  mosquitto_pub -h "$BROKER" -p "$PORT" -u "$USERNAME" -P "$PASSWORD" \
+    -t "parking/device/test/status" -m "test" 2>/dev/null
+  
+  if [ $? -eq 0 ]; then
+    echo "✅ Conexão MQTT OK"
+    return 0
+  else
+    echo "❌ ERRO: Não conseguiu conectar ao broker MQTT"
+    echo "   Verifique:"
+    echo "   • Broker está rodando: $BROKER:$PORT"
+    echo "   • Credenciais corretas: $USERNAME / $PASSWORD"
+    echo ""
+    return 1
+  fi
 }
 
-print_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+# Função para simular ENTRADA
+simulate_entry() {
+  TIMESTAMP=$(date +%s000)
+  
+  PAYLOAD=$(cat <<EOF
+{
+  "event": "entry",
+  "timestamp": $TIMESTAMP,
+  "parkingLotId": "$PARKING_LOT_ID",
+  "device": "esp32-parking-01"
+}
+EOF
+)
+
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "🚗 SIMULANDO ENTRADA DE CARRO"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Tópico: parking/entry"
+  echo "Payload:"
+  echo "$PAYLOAD"
+  echo ""
+  
+  mosquitto_pub -h "$BROKER" -p "$PORT" -u "$USERNAME" -P "$PASSWORD" \
+    -t "parking/entry" -m "$PAYLOAD"
+  
+  if [ $? -eq 0 ]; then
+    echo "✅ Entrada publicada com sucesso"
+  else
+    echo "❌ Falha ao publicar entrada"
+  fi
 }
 
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+# Função para simular SAÍDA
+simulate_exit() {
+  TIMESTAMP=$(date +%s000)
+  
+  PAYLOAD=$(cat <<EOF
+{
+  "event": "exit",
+  "timestamp": $TIMESTAMP,
+  "parkingLotId": "$PARKING_LOT_ID",
+  "device": "esp32-parking-01"
 }
+EOF
+)
+
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "🚗 SIMULANDO SAÍDA DE CARRO"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Tópico: parking/exit"
+  echo "Payload:"
+  echo "$PAYLOAD"
+  echo ""
+  
+  mosquitto_pub -h "$BROKER" -p "$PORT" -u "$USERNAME" -P "$PASSWORD" \
+    -t "parking/exit" -m "$PAYLOAD"
+  
+  if [ $? -eq 0 ]; then
+    echo "✅ Saída publicada com sucesso"
+  else
+    echo "❌ Falha ao publicar saída"
+  fi
+}
+
+# Função para simular uma vaga (teste alternativo)
+simulate_spot() {
+  local SPOT_ID="${1:-1}"
+  local STATUS="${2:-ocupada}"
+  
+  PAYLOAD=$(cat <<EOF
+{
+  "vagaId": $SPOT_ID,
+  "status": "$STATUS",
+  "parkingLotId": "$PARKING_LOT_ID",
+  "device": "esp32-parking-01",
+  "uptime_s": 3600
+}
+EOF
+)
+
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "📍 SIMULANDO MUDANÇA DE VAGA"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "Vaga: $SPOT_ID"
+  echo "Status: $STATUS"
+  echo "Payload:"
+  echo "$PAYLOAD"
+  echo ""
+  
+  TOPIC="parking/spots/$SPOT_ID"
+  mosquitto_pub -h "$BROKER" -p "$PORT" -u "$USERNAME" -P "$PASSWORD" \
+    -t "$TOPIC" -m "$PAYLOAD"
+  
+  if [ $? -eq 0 ]; then
+    echo "✅ Vaga publicada com sucesso"
+  else
+    echo "❌ Falha ao publicar vaga"
+  fi
+}
+
+# Menu interativo
+interactive_menu() {
+  while true; do
+    echo ""
+    echo "════════════════════════════════════════════════════════"
+    echo "  MENU DE TESTE"
+    echo "════════════════════════════════════════════════════════"
+    echo "1 - Simular ENTRADA de carro"
+    echo "2 - Simular SAÍDA de carro"
+    echo "3 - Simular mudança de VAGA (ocupada)"
+    echo "4 - Simular liberação de VAGA (livre)"
+    echo "5 - Teste sequencial (entrada + 3s + saída)"
+    echo "6 - Verificar conexão MQTT"
+    echo "0 - Sair"
+    echo ""
+    echo -n "Escolha uma opção: "
+    read -r OPCAO
+    
+    case "$OPCAO" in
+      1)
+        simulate_entry
+        ;;
+      2)
+        simulate_exit
+        ;;
+      3)
+        simulate_spot 5 "ocupada"
+        ;;
+      4)
+        simulate_spot 5 "livre"
+        ;;
+      5)
+        echo ""
+        echo "[SEQUÊNCIA] Iniciando teste entrada → espera 3s → saída"
+        simulate_entry
+        echo ""
+        echo "[SEQUÊNCIA] ⏳ Aguardando 3 segundos..."
+        sleep 3
+        simulate_exit
+        echo ""
+        echo "[SEQUÊNCIA] ✅ Teste sequencial completo"
+        ;;
+      6)
+        test_mqtt_connection
+        ;;
+      0)
+        echo ""
+        echo "Encerrando..."
+        exit 0
+        ;;
+      *)
+        echo "❌ Opção inválida"
+        ;;
+    esac
+  done
+}
+
+# Verificar se mosquitto_pub está instalado
+if ! command -v mosquitto_pub &> /dev/null; then
+  echo "❌ ERRO: mosquitto_pub não encontrado"
+  echo ""
+  echo "Instale com:"
+  echo "  Ubuntu/Debian: sudo apt-get install mosquitto-clients"
+  echo "  macOS: brew install mosquitto"
+  echo ""
+  exit 1
+fi
+
+# Testar conexão
+if test_mqtt_connection; then
+  # Se estiver sendo executado com argumentos, fazer teste automático
+  if [ $# -gt 2 ]; then
+    simulate_entry
+    echo ""
+    echo "Aguardando 3 segundos..."
+    sleep 3
+    simulate_exit
+  else
+    # Caso contrário, mostrar menu interativo
+    interactive_menu
+  fi
+else
+  exit 1
+fi
 
 print_error() {
     echo -e "${RED}❌ $1${NC}"

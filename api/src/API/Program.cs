@@ -96,7 +96,15 @@ try
                   .AllowCredentials()); // SignalR precisa disso
     });
 
-    builder.Services.AddSignalR(); // SignalR para tempo real
+    // ✅ FIX: Configurar SignalR com timeouts adequados
+    builder.Services.AddSignalR(options =>
+    {
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(45);
+        options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+        options.MaximumReceiveMessageSize = 64 * 1024 * 1024; // 64MB
+        options.StreamBufferCapacity = 10;
+    });
     
     // Registrar handler MQTT -> SignalR
     builder.Services.AddScoped<IMqttMessageHandler, ParkingSystem.API.Services.MqttToSignalRHandler>();

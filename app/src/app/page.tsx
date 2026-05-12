@@ -53,25 +53,59 @@ export default function Home() {
   }, []);
 
   const handleSpotUpdated = useCallback((event: SpotUpdatedEvent) => {
-    console.log('[Home] SpotUpdated event received:', event);
+    console.log('[Home] 🟢 SpotUpdated event received:', event);
+    console.log('[Home] 📋 Event details - SpotNumber:', event.spotNumber, 'Type:', typeof event.spotNumber);
+    console.log('[Home] 📋 Event details - Status:', event.status, 'Type:', typeof event.status);
 
     if (event.parkingLotId !== PARKING_LOT_ID) {
+      console.log('[Home] ⚠️ Ignorando evento de outro estacionamento. Esperado:', PARKING_LOT_ID, 'Recebido:', event.parkingLotId);
       return;
     }
 
     const normalizedStatus = normalizeStatusValue(event.status);
+    console.log('[Home] 🔄 Atualizando spot', event.spotNumber, 'para status', normalizedStatus, '(', ParkingSpotStatus[normalizedStatus], ')');
 
     setSpots((prevSpots) => {
-      return prevSpots.map((spot) => {
-        if (spot.spotNumber === event.spotNumber) {
+      let foundMatch = false;
+      const updated = prevSpots.map((spot) => {
+        // Comparação flexível: normalizar ambos para string e comparar
+        const spotNumStr = String(spot.spotNumber).trim();
+        const eventSpotNumStr = String(event.spotNumber).trim();
+        
+        console.log('[Home] 🔍 Comparando:', spotNumStr, '===', eventSpotNumStr, '?', spotNumStr === eventSpotNumStr);
+        
+        if (spotNumStr === eventSpotNumStr) {
+          console.log('[Home] ✅ MATCH ENCONTRADO! Spot', event.spotNumber, 'mudou para status:', normalizedStatus);
+          foundMatch = true;
           return { ...spot, status: normalizedStatus };
         }
         return spot;
       });
+      
+      if (!foundMatch) {
+        console.warn('[Home] ⚠️ Nenhum spot correspondente encontrado para spotNumber:', event.spotNumber);
+        console.warn('[Home] 📊 Spots disponíveis:', prevSpots.map(s => s.spotNumber).join(', '));
+      }
+
+      console.log('[Home] 📊 Total de vagas após atualização:', updated.length);
+      return updated;
     });
   }, []);
 
   const { isConnected, error: signalRError } = useSignalR(handleSpotUpdated, PARKING_LOT_ID);
+
+  // ✅ DEBUG: Expor estado global
+  useEffect(() => {
+    console.log('[Home] Estado atual - isConnected:', isConnected, 'spots:', spots.length);
+    (window as any).parkingAppState = {
+      isConnected,
+      signalRError,
+      spots,
+      parkingLotId: PARKING_LOT_ID,
+      timestamp: new Date().toISOString(),
+    };
+    console.log('[Home] ✅ window.parkingAppState disponível no console');
+  }, [isConnected, signalRError, spots]);
 
   const handleSelectPanel = useCallback((panelId: PanelId) => {
     console.log(`[Home] Panel selected: ${panelId}`);

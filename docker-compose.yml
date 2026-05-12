@@ -93,8 +93,8 @@ services:
       context: ./app
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5167}
-        NEXT_PUBLIC_SIGNALR_URL: ${NEXT_PUBLIC_SIGNALR_URL:-http://localhost:5167/hubs/parking}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://parking-backend:5167}
+        NEXT_PUBLIC_SIGNALR_URL: ${NEXT_PUBLIC_SIGNALR_URL:-http://parking-backend:5167/hubs/parking}
         CACHEBUST: ${CACHEBUST:-1}
     container_name: parking-frontend
     restart: unless-stopped

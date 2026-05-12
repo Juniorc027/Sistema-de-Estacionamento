@@ -1,9 +1,24 @@
-# Permissões MQTT por tópico para o usuário do sistema de estacionamento
+# ============================================================
+# MQTT ACL - Parking IoT System
+# ============================================================
+
+# User: parking_iot (used by both backend and ESP32)
 user parking_iot
 
+# Spot status updates (individual spots and snapshots)
+topic readwrite parking/spots
 topic readwrite parking/spots/#
+
+# Parking events (entry/exit)
+topic readwrite parking/events
 topic readwrite parking/entry
 topic readwrite parking/exit
+
+# Parking system status
 topic readwrite parking/status
+
+# Device management (backend and IoT devices)
 topic readwrite parking/device/#
+
+# System topics (read-only for monitoring)
 topic read $SYS/#
