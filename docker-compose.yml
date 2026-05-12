@@ -104,6 +104,7 @@ services:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:5167}
       - NEXT_PUBLIC_SIGNALR_URL=${NEXT_PUBLIC_SIGNALR_URL:-http://localhost:5167/hubs/parking}
+      - NEXT_PUBLIC_ENABLE_WEBGL=true
     depends_on:
       backend:
         condition: service_healthy
@@ -113,6 +114,12 @@ services:
       timeout: 10s
       start_period: 30s
       retries: 5
+    # ✅ Otimizações para WebGL em Docker
+    shm_size: 512mb
+    cap_add:
+      - SYS_NICE
+    cap_drop:
+      - NET_RAW
     networks:
       - parking-network
 

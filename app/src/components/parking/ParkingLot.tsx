@@ -2,8 +2,7 @@
  * ParkingLot — Cena 3D completa do estacionamento (Excalidraw-accurate)
  *
  * ┌──────────────────────────────────────────────┐
- * │ SAÍDA ←                                      │
- * │    [1] [2] [3] [4] [5] [6]                  │  z = −10
+ * │      [15] [16] [17] [18] [19] [20]          │  z = −10  SAÍDA ←
  * │                                              │
  * │            ═══ corredor ═══                  │  5 unidades livres
  * │                                              │
@@ -11,14 +10,13 @@
  * │                                              │
  * │            ═══ corredor ═══                  │  5 unidades livres
  * │                                              │
- * │      [15] [16] [17] [18] [19] [20]          │  z = +10
- * │ ENTRADA →                                    │
+ * │    [1] [2] [3] [4] [5] [6]                  │  z = +10  ENTRADA →
  * └──────────────────────────────────────────────┘
  *
  * Vaga:  [2.5 × 0.2 × 4.5]   spacingX = 3.0
  * Fileiras de 6 centralizadas em relação à de 8
- * Guarita Entrada: canto inferior esquerdo (−X, +Z)
- * Guarita Saída:   canto superior esquerdo (−X, −Z)
+ * Guarita Entrada: canto inferior esquerdo (−X, +Z)  [Vagas 1–6]
+ * Guarita Saída:   canto superior esquerdo (−X, −Z)  [Vagas 15–20]
  */
 'use client';
 
@@ -33,9 +31,9 @@ import { ParkingRow } from './ParkingRow';
    ═══════════════════════════════════════════════════ */
 
 const ROW_CONFIG = [
-  { name: 'top',    numSpots: 6,  z: -10, face: 'south' as const },
-  { name: 'middle', numSpots: 8,  z:   0, face: 'south' as const },
-  { name: 'bottom', numSpots: 6,  z:  10, face: 'north' as const },
+  { name: 'bottom', numSpots: 6,  z:  10, face: 'north' as const }, // Vagas 1–6 (ENTRADA, lado sul)
+  { name: 'middle', numSpots: 8,  z:   0, face: 'south' as const }, // Vagas 7–14 (CENTRO)
+  { name: 'top',    numSpots: 6,  z: -10, face: 'south' as const }, // Vagas 15–20 (SAÍDA, lado norte)
 ];
 
 /**
@@ -286,7 +284,28 @@ export function ParkingLot({ spots }: ParkingLotProps) {
       <Canvas
         shadows
         camera={{ position: [24, 24, 30], fov: 42, near: 0.1, far: 150 }}
-        gl={{ antialias: true }}
+        gl={{
+          // ✅ Otimizações para WebGL
+          antialias: true,
+          powerPreference: 'high-performance',
+          stencil: true,
+          depth: true,
+          
+          // ✅ Importante para Docker
+          failIfMajorPerformanceCaveat: false,
+          preserveDrawingBuffer: false,
+          
+          // ✅ Alpha para composição
+          alpha: true,
+        }}
+        onCreated={(state) => {
+          // ✅ Log de sucesso
+          console.log('[Canvas] ✅ WebGL context criado com sucesso');
+        }}
+        onError={(error) => {
+          // ✅ Captura erros
+          console.error('[Canvas] ❌ Erro ao criar WebGL context:', error);
+        }}
       >
         <SceneLighting />
         <EffectsInner />

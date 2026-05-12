@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiService } from '../services/api';
 import { useSignalR } from '../hooks/useSignalR';
@@ -8,15 +7,14 @@ import { ParkingSpot, ParkingSpotStatus, SpotUpdatedEvent, PanelId, ReportId } f
 import { Sidebar } from '../components/ui/Sidebar';
 import { ReportPanel } from '../components/ui/ReportPanel';
 import { DashboardPanel } from '../components/ui/DashboardPanel';
-import { FlowManagementPanel } from '../components/ui/FlowManagementPanel';
-import { SpotAuditPanel } from '../components/ui/SpotAuditPanel';
-
-const ParkingLot = dynamic(
-  () => import('../components/parking/ParkingLot').then((mod) => mod.ParkingLot),
-  { ssr: false }
-);
+import { ParkingLotWithFallback } from '../components/parking/ParkingLotWithFallback';
 
 const PARKING_LOT_ID = '45fc18f2-bdd8-4b11-b964-f8face1147f0';
+
+function normalizeSpotNumber(spotNumber: string | number): string {
+  const numericValue = typeof spotNumber === 'string' ? parseInt(spotNumber, 10) : spotNumber;
+  return numericValue.toString().padStart(3, '0');
+}
 
 function normalizeStatusValue(value: number | string): ParkingSpotStatus {
   if (typeof value === 'number') {
@@ -40,7 +38,13 @@ export default function Home() {
     async function loadInitialSpots() {
       try {
         const spotsData = await ApiService.getParkingSpots(PARKING_LOT_ID);
-        setSpots(spotsData);
+        // Garantir que todos os spotNumbers estejam normalizados com padding "001", "002", etc
+        const normalizedSpots = spotsData.map((spot) => ({
+          ...spot,
+          spotNumber: normalizeSpotNumber(spot.spotNumber),
+        }));
+        console.log('[Home] Loaded spots (normalized):', normalizedSpots.map((s) => `${s.spotNumber}:${s.status}`).join(', '));
+        setSpots(normalizedSpots);
         setLoading(false);
       } catch (err) {
         console.error('Failed to load spots:', err);
@@ -54,20 +58,30 @@ export default function Home() {
 
   const handleSpotUpdated = useCallback((event: SpotUpdatedEvent) => {
     console.log('[Home] SpotUpdated event received:', event);
+    console.log('[Home] Event spotNumber:', event.spotNumber, 'type:', typeof event.spotNumber);
 
     if (event.parkingLotId !== PARKING_LOT_ID) {
+      console.log('[Home] Ignoring event from different parking lot:', event.parkingLotId);
       return;
     }
 
     const normalizedStatus = normalizeStatusValue(event.status);
+    const normalizedSpotNumber = normalizeSpotNumber(event.spotNumber);
+
+    console.log('[Home] Normalized spotNumber:', normalizedSpotNumber);
 
     setSpots((prevSpots) => {
-      return prevSpots.map((spot) => {
-        if (spot.spotNumber === event.spotNumber) {
+      const updatedSpots = prevSpots.map((spot) => {
+        const spotNum = normalizeSpotNumber(spot.spotNumber);
+        console.log('[Home] Comparing spot:', spotNum, 'with event:', normalizedSpotNumber, 'match:', spotNum === normalizedSpotNumber);
+        
+        if (spotNum === normalizedSpotNumber) {
+          console.log('[Home] ✅ MATCH! Updating spot', spotNum, 'status:', spot.status, '→', normalizedStatus);
           return { ...spot, status: normalizedStatus };
         }
         return spot;
       });
+      return updatedSpots;
     });
   }, []);
 
@@ -171,8 +185,8 @@ export default function Home() {
       </div>
 
       {/* 3D Visualization - Center */}
-      <div className={`w-full h-full transition-opacity duration-300 ${isPanelActive ? 'opacity-75' : 'opacity-100'}`}>
-        <ParkingLot spots={spots} />
+      <div className={`w-full h-full transition-opacity duration-300 ${isReportActive ? 'opacity-75' : 'opacity-100'}`}>
+        <ParkingLotWithFallback spots={spots} />
       </div>
     </main>
   );
