@@ -111,9 +111,8 @@ export default function Home() {
     );
   }
 
-  // Determinar se renderizar condicional (Dashboard vs ReportPanel)
-  const isReportActive = activePanel !== 'dashboard';
-  const reportId = isReportActive ? (activePanel as ReportId) : null;
+  // Determinar qual painel renderizar baseado no activePanel
+  const isPanelActive = activePanel !== 'dashboard';
 
   return (
     <main className="w-full h-screen bg-gray-900 relative overflow-hidden">
@@ -124,7 +123,7 @@ export default function Home() {
 
       {/* Right Panel - Conditional Rendering */}
       <div className="absolute inset-y-0 right-0 z-20">
-        {activePanel === 'dashboard' ? (
+        {activePanel === 'dashboard' && (
           /* Dashboard Tab */
           <DashboardPanel 
             parkingLotId={PARKING_LOT_ID}
@@ -133,10 +132,34 @@ export default function Home() {
               // Futuramente: focar câmera 3D na vaga
             }}
           />
-        ) : (
-          /* Report Tab */
+        )}
+
+        {activePanel === 'occupancy' && (
+          /* Flow Management Tab */
+          <FlowManagementPanel 
+            parkingLotId={PARKING_LOT_ID} 
+            onClose={() => {
+              console.log('[Home] Flow management closed, returning to dashboard');
+              setActivePanel('dashboard');
+            }} 
+          />
+        )}
+
+        {activePanel === 'ranking' && (
+          /* Spot Audit Tab */
+          <SpotAuditPanel 
+            parkingLotId={PARKING_LOT_ID} 
+            onClose={() => {
+              console.log('[Home] Spot audit closed, returning to dashboard');
+              setActivePanel('dashboard');
+            }} 
+          />
+        )}
+
+        {activePanel === 'history' && (
+          /* Report/Events Tab */
           <ReportPanel 
-            reportId={reportId} 
+            reportId={activePanel} 
             parkingLotId={PARKING_LOT_ID} 
             onClose={() => {
               console.log('[Home] Report closed, returning to dashboard');

@@ -9,11 +9,13 @@
  *   - Laje colorida (corpo da vaga)
  *   - Linhas brancas de demarcação (esquerda, direita, fundo)
  *   - Esfera do sensor IR no lado fechado
+ *   - Número da vaga em texto 3D (branco com contorno, pintado no chão)
  */
 'use client';
 
 import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
 import { Color, MeshStandardMaterial } from 'three';
 import { Text } from '@react-three/drei';
 import { ParkingSpotStatus } from '../../types/parking';
