@@ -1,0 +1,122 @@
+#pragma once
+
+/**
+ * ============================================================
+ *  Config.h.example — Configuração do ESP32
+ *  
+ *  📝 INSTRUÇÕES:
+ *  1. Copie este arquivo para Config.h: cp Config.h.example Config.h
+ *  2. Preencha com seus dados reais de Wi-Fi e MQTT
+ *  3. Nunca commite Config.h no Git (será ignorado por .gitignore)
+ *  
+ *  ⚠️  SEGURANÇA: Credenciais de Wi-Fi e MQTT são sensíveis!
+ * ============================================================
+ */
+
+// ====== Wi-Fi ======
+/**
+ * SSID do seu roteador/ponto de acesso
+ * Exemplo: "Home-WiFi", "ESP32-AP", etc
+ */
+static const char* WIFI_SSID = "YOUR_WIFI_SSID";
+
+/**
+ * Senha da rede Wi-Fi
+ * Deixe vazio ("") se a rede for aberta
+ */
+static const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+
+// ====== MQTT ======
+/**
+ * Endereço IP do Broker MQTT (ex: Mosquitto local)
+ * Exemplos:
+ *   - Local: "192.168.1.100"
+ *   - Docker: "mqtt" (if using docker-compose with service name)
+ *   - Cloud: "mqtt.example.com"
+ */
+static const char* MQTT_BROKER = "YOUR_MQTT_BROKER_IP";
+
+/**
+ * Porta padrão do MQTT
+ * Padrão: 1883 (não encriptado)
+ * Com TLS: 8883
+ */
+static const int MQTT_PORT = 1883;
+
+/**
+ * ID único do cliente MQTT
+ * Recomendado: "esp32-parking-<numero>"
+ * Exemplo: "esp32-parking-01", "esp32-parking-gate-entry"
+ */
+static const char* MQTT_CLIENT_ID = "esp32-parking-01";
+
+// ====== Parking System ======
+/**
+ * UUID do estacionamento (deve corresponder ao backend)
+ * Formato: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+ * 
+ * Este ID pode ser obtido do dashboard ou da API:
+ * GET http://api:5167/api/parkinglots
+ */
+static const char* PARKING_LOT_ID = "45fc18f2-bdd8-4b11-b964-f8face1147f0";
+
+// ====== MQTT Topics ======
+/**
+ * Tópicos MQTT para integração com backend
+ * Não altere sem comunicar com o backend
+ */
+static const char* TOPIC_PARKING_ENTRY = "parking/entry";
+static const char* TOPIC_PARKING_EXIT = "parking/exit";
+static const char* TOPIC_SPOT_SNAPSHOT = "parking/spots/snapshot";
+static const char* TOPIC_DEVICE_STATUS = "parking/device/status";
+static const char* TOPIC_GATE_COMMAND = "parking/gate/command"; // Opcional (futuro)
+
+// ====== Hardware ======
+/**
+ * Pinos do ESP32 para Servo Motors (PWM)
+ * Ajuste conforme sua montagem
+ */
+static const int SERVO_ENTRADA_PIN = 32;  // GPIO32 → Servo cancela entrada
+static const int SERVO_SAIDA_PIN = 33;    // GPIO33 → Servo cancela saída
+
+/**
+ * Pinos para sensores IR (entrada digital)
+ * Ajuste conforme sua montagem
+ */
+static const int SENSOR_ENTRADA_PIN = 35; // GPIO35 → Sensor entrada (ADC)
+static const int SENSOR_SAIDA_PIN = 34;   // GPIO34 → Sensor saída (ADC)
+
+/**
+ * Configuração I2C para expansores MCP23017
+ * SDA: GPIO21, SCL: GPIO22 (padrão ESP32)
+ */
+static const uint8_t I2C_SDA = 21;
+static const uint8_t I2C_SCL = 22;
+static const uint8_t I2C_FREQ = 100; // kHz
+
+/**
+ * Endereços I2C dos expansores MCP23017
+ * MCP0: Pinos 0-7 (GPIOA)
+ * MCP1: Pinos 8-15 (GPIOB)
+ */
+static const uint8_t MCP0_ADDRESS = 0x20; // A0=0, A1=0, A2=0
+static const uint8_t MCP1_ADDRESS = 0x21; // A0=1, A1=0, A2=0
+
+// ====== Timings (ms) ======
+/**
+ * Intervalo de publicação de status do dispositivo
+ * Recomendado: 30000ms (30 segundos)
+ */
+static const unsigned long STATUS_PUBLISH_INTERVAL = 30000;
+
+/**
+ * Intervalo de verificação de reconexão (WiFi/MQTT)
+ * Recomendado: 5000ms (5 segundos)
+ */
+static const unsigned long RECONNECT_INTERVAL = 5000;
+
+/**
+ * Timeout para operações WiFi/MQTT
+ * Recomendado: 10000ms (10 segundos)
+ */
+static const unsigned long MQTT_CONNECT_TIMEOUT = 10000;

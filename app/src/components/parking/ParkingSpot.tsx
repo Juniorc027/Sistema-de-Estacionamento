@@ -17,7 +17,6 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import { Color, MeshStandardMaterial } from 'three';
-import { Text } from '@react-three/drei';
 import { ParkingSpotStatus } from '../../types/parking';
 
 /* ── Geometria da vaga ── */

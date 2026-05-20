@@ -8,8 +8,10 @@ import { Sidebar } from '../components/ui/Sidebar';
 import { ReportPanel } from '../components/ui/ReportPanel';
 import { DashboardPanel } from '../components/ui/DashboardPanel';
 import { ParkingLotWithFallback } from '../components/parking/ParkingLotWithFallback';
+import { FlowManagementPanel } from '@/components/ui/FlowManagementPanel';
+import { SpotAuditPanel } from '@/components/ui/SpotAuditPanel';
 
-const PARKING_LOT_ID = '45fc18f2-bdd8-4b11-b964-f8face1147f0';
+const PARKING_LOT_ID = process.env.NEXT_PUBLIC_PARKING_LOT_ID || '45fc18f2-bdd8-4b11-b964-f8face1147f0';
 
 function normalizeSpotNumber(spotNumber: string | number): string {
   const numericValue = typeof spotNumber === 'string' ? parseInt(spotNumber, 10) : spotNumber;
@@ -112,7 +114,8 @@ export default function Home() {
   }
 
   // Determinar qual painel renderizar baseado no activePanel
-  const isPanelActive = activePanel !== 'dashboard';
+  const isReportActive = activePanel !== 'dashboard';
+  const reportId = isReportActive ? (activePanel as ReportId) : null;
 
   return (
     <main className="w-full h-screen bg-gray-900 relative overflow-hidden">

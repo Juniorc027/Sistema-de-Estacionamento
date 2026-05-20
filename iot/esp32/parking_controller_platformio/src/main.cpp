@@ -323,9 +323,10 @@ void updateGateEntry() {
         gateEntry.state = GATE_CLOSING;
         gateEntry.stateChangeMs = agora;
 
-        // 📤 Publica evento de entrada
-        StaticJsonDocument<200> doc;
+        // 📤 Publica evento de entrada com vagaId obrigatório
+        StaticJsonDocument<256> doc;
         doc["parkingLotId"] = PARKING_LOT_ID;
+        doc["vagaId"] = "spot-sensor-entrada"; // ID da vaga associada ao sensor de entrada
         doc["eventType"] = "entry";
         doc["timestamp"] = millis();
         String payload;
@@ -333,6 +334,8 @@ void updateGateEntry() {
         mqtt.publish(TOPIC_PARKING_ENTRY, payload.c_str());
         Serial.print("[MQTT TX] ");
         Serial.println(TOPIC_PARKING_ENTRY);
+        Serial.print("[MQTT] Payload: ");
+        Serial.println(payload);
       }
       break;
 
@@ -415,9 +418,10 @@ void updateGateSaida() {
         gateSaida.state = GATE_CLOSING;
         gateSaida.stateChangeMs = agora;
 
-        // 📤 Publica evento de saída
-        StaticJsonDocument<200> doc;
+        // 📤 Publica evento de saída com vagaId obrigatório
+        StaticJsonDocument<256> doc;
         doc["parkingLotId"] = PARKING_LOT_ID;
+        doc["vagaId"] = "spot-sensor-saida"; // ID da vaga associada ao sensor de saída
         doc["eventType"] = "exit";
         doc["timestamp"] = millis();
         String payload;
@@ -425,6 +429,8 @@ void updateGateSaida() {
         mqtt.publish(TOPIC_PARKING_EXIT, payload.c_str());
         Serial.print("[MQTT TX] ");
         Serial.println(TOPIC_PARKING_EXIT);
+        Serial.print("[MQTT] Payload: ");
+        Serial.println(payload);
       }
       break;
 

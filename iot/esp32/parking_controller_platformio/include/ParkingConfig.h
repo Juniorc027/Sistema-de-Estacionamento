@@ -24,6 +24,20 @@ static constexpr SpotMap SPOT_MAP[TOTAL_SPOTS] = {
   {1, 0}, {1, 1}, {1, 2}, {1, 3}
 };
 
+/**
+ * UUIDs únicos para cada vaga (sincronizados com backend)
+ * Estes IDs devem corresponder aos registros no banco de dados
+ * 
+ * Se não tiver UUIDs, use um formato simples: "spot-001", "spot-002", etc
+ * OU obtenha de: GET http://backend:5167/api/parkinglots/{id}/spots
+ */
+static const char* SPOT_IDS[TOTAL_SPOTS] = {
+  "spot-001", "spot-002", "spot-003", "spot-004", "spot-005",
+  "spot-006", "spot-007", "spot-008", "spot-009", "spot-010",
+  "spot-011", "spot-012", "spot-013", "spot-014", "spot-015",
+  "spot-016", "spot-017", "spot-018", "spot-019", "spot-020"
+};
+
 // ====== Sensores de cancela (opcional já pronto) ======
 // Entrada: MCP2 pino 6 / Saída: MCP2 pino 7
 static constexpr uint8_t ENTRY_GATE_MCP_INDEX = 1;

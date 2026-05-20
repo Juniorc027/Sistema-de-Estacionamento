@@ -43,5 +43,15 @@ app/.next/
 app/.env*
 app/out/
 
+## ESP32 Configuration (sensitive credentials)
+iot/esp32/**/include/Config.h
+!iot/esp32/**/include/Config.h.example
+
+## Environment Variables (root and Docker)
+.env
+.env.local
+.env.*.local
+!.env.example
+
 ## Backup folder (local only)
 parking-frontend-backup/
