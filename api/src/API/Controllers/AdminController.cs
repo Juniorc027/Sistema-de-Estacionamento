@@ -87,31 +87,36 @@ public class AdminController : ControllerBase
             // ── Top 5 vagas disputadas (últimos 30 dias) ───────────
             var thirtyDaysAgoUtc = BrazilClock.ToUtc(todayBr.AddDays(-30));
 
-            var topRaw = await _db.ParkingSessions
+            // Traz para memória antes de calcular TotalMinutes (TimeSpan não é traduzível pelo EF/MySQL)
+            var sessionsRaw = await _db.ParkingSessions
                 .Where(s => s.ParkingSpot.ParkingLotId == parkingLotId
                          && s.StartTime >= thirtyDaysAgoUtc
                          && s.Status == SessionStatus.Completed)
-                .GroupBy(s => new { s.ParkingSpotId, s.ParkingSpot.SpotNumber, s.ParkingSpot.Status })
-                .Select(g => new
+                .Select(s => new
                 {
-                    g.Key.SpotNumber,
-                    g.Key.Status,
-                    UseCount = g.Count(),
-                    AvgDuration = g.Where(x => x.Duration.HasValue)
-                                   .Average(x => (double?)x.Duration!.Value.TotalMinutes) ?? 0
+                    s.ParkingSpotId,
+                    s.ParkingSpot.SpotNumber,
+                    s.ParkingSpot.Status,
+                    DurationTicks = s.Duration.HasValue ? (long?)s.Duration.Value.Ticks : null
                 })
-                .OrderByDescending(x => x.UseCount)
-                .Take(5)
                 .ToListAsync();
 
-            var topSpots = topRaw.Select(x => new AdminTopSpotDto(
-                x.SpotNumber,
-                x.UseCount,
-                Math.Round(x.AvgDuration, 1),
-                x.Status == ParkingSpotStatus.Occupied   ? "Ocupada"    :
-                x.Status == ParkingSpotStatus.Reserved   ? "Reservada"  :
-                x.Status == ParkingSpotStatus.Maintenance ? "Manutenção" : "Livre"
-            )).ToList();
+            var topSpots = sessionsRaw
+                .GroupBy(s => new { s.ParkingSpotId, s.SpotNumber, s.Status })
+                .Select(g => new AdminTopSpotDto(
+                    g.Key.SpotNumber,
+                    g.Count(),
+                    Math.Round(g.Where(x => x.DurationTicks.HasValue)
+                                .Select(x => TimeSpan.FromTicks(x.DurationTicks!.Value).TotalMinutes)
+                                .DefaultIfEmpty(0)
+                                .Average(), 1),
+                    g.Key.Status == ParkingSpotStatus.Occupied   ? "Ocupada"    :
+                    g.Key.Status == ParkingSpotStatus.Reserved   ? "Reservada"  :
+                    g.Key.Status == ParkingSpotStatus.Maintenance ? "Manutenção" : "Livre"
+                ))
+                .OrderByDescending(x => x.UseCount)
+                .Take(5)
+                .ToList();
 
             var result = new AdminOverviewDto(
                 ParkingLotId:           parkingLotId,

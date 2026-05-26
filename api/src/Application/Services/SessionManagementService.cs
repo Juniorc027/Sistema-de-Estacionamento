@@ -214,8 +214,16 @@ public class SessionManagementService : ISessionManagementService
             var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
             if (lot != null && activeSession.Duration.HasValue)
             {
-                var minutes = Math.Max(1, Math.Ceiling(activeSession.Duration.Value.TotalMinutes));
-                activeSession.TotalAmount = (decimal)minutes * lot.RatePerMinute;
+                // Menos de 60 segundos: gratuito (tolerância de sensor)
+                if (activeSession.Duration.Value.TotalSeconds < 60)
+                {
+                    activeSession.TotalAmount = 0m;
+                }
+                else
+                {
+                    var minutes = Math.Ceiling(activeSession.Duration.Value.TotalMinutes);
+                    activeSession.TotalAmount = (decimal)minutes * lot.RatePerMinute;
+                }
             }
 
             _uow.ParkingSessions.Update(activeSession);

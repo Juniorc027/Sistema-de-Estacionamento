@@ -176,7 +176,9 @@ public class ParkingSessionService : IParkingSessionService
 
     private static decimal CalculateAmount(TimeSpan duration, decimal ratePerMinute)
     {
-        var minutes = Math.Max(1, Math.Ceiling(duration.TotalMinutes));
+        // Menos de 60 segundos: gratuito (tolerância de sensor)
+        if (duration.TotalSeconds < 60) return 0m;
+        var minutes = Math.Ceiling(duration.TotalMinutes);
         return (decimal)minutes * ratePerMinute;
     }
 
