@@ -214,7 +214,7 @@ public class SessionManagementService : ISessionManagementService
             var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
             if (lot != null && activeSession.Duration.HasValue)
             {
-                var minutes = Math.Ceiling(activeSession.Duration.Value.TotalMinutes);
+                var minutes = Math.Max(1, Math.Ceiling(activeSession.Duration.Value.TotalMinutes));
                 activeSession.TotalAmount = (decimal)minutes * lot.RatePerMinute;
             }
 
