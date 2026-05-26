@@ -212,9 +212,9 @@ export default function AdminPage() {
   const occupancyPct = overview?.occupancyPercentage ?? 0;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
+    <div className="h-screen flex flex-col bg-zinc-950 text-white overflow-hidden">
       {/* Header */}
-      <div className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-sm flex-shrink-0 z-10">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
@@ -257,6 +257,7 @@ export default function AdminPage() {
         </div>
       </div>
 
+      <div className="flex-1 overflow-y-auto">
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
         {/* ── KPI Strip ─────────────────────────────────────────────────────── */}
@@ -514,6 +515,7 @@ export default function AdminPage() {
           </motion.div>
         )}
 
+      </div>
       </div>
     </div>
   );
