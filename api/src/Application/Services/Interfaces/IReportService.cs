@@ -33,4 +33,14 @@ public interface IReportService
     /// Vagas rankeadas por frequência de uso
     /// </summary>
     Task<List<SpotRankingDto>> GetSpotRankingAsync(ReportFilter filter);
+
+    /// <summary>
+    /// Relatório de faturamento agrupado por dia e por vaga
+    /// </summary>
+    Task<RevenueReportDto> GetRevenueReportAsync(Guid parkingLotId, DateTime from, DateTime to);
+
+    /// <summary>
+    /// Comparativo de vagas mais e menos disputadas (com média e desvio padrão)
+    /// </summary>
+    Task<SpotComparisonDto> GetSpotComparisonAsync(Guid parkingLotId, DateTime from, DateTime to);
 }

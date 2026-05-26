@@ -10,7 +10,7 @@ public class CreateParkingLotValidator : AbstractValidator<CreateParkingLotDto>
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Address).NotEmpty().MaximumLength(255);
         RuleFor(x => x.TotalSpots).GreaterThan(0).LessThanOrEqualTo(500);
-        RuleFor(x => x.HourlyRate).GreaterThan(0);
+        RuleFor(x => x.RatePerMinute).GreaterThan(0).LessThanOrEqualTo(100m);
     }
 }
 
@@ -20,6 +20,6 @@ public class UpdateParkingLotValidator : AbstractValidator<UpdateParkingLotDto>
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Address).NotEmpty().MaximumLength(255);
-        RuleFor(x => x.HourlyRate).GreaterThan(0);
+        RuleFor(x => x.RatePerMinute).GreaterThan(0).LessThanOrEqualTo(100m);
     }
 }

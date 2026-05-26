@@ -2,38 +2,43 @@
  * SignalR Service  
  */
 import * as signalR from '@microsoft/signalr';
-import { SpotUpdatedEvent, DashboardOverviewDto } from '../types/parking';
+import { SpotUpdatedEvent } from '../types/parking';
 
 const HUB_URL = process.env.NEXT_PUBLIC_SIGNALR_URL || 'http://localhost:5167/hubs/parking';
 
 export class SignalRService {
   private connection: signalR.HubConnection | null = null;
   private joinedParkingLotId: string | null = null;
+  private startPromise: Promise<void> | null = null;
 
   async start(): Promise<void> {
-    if (this.connection) {
-      if (this.connection.state === signalR.HubConnectionState.Connected) {
-        return;
-      }
-
-      if (this.connection.state === signalR.HubConnectionState.Connecting) {
-        return;
-      }
+    if (this.connection?.state === signalR.HubConnectionState.Connected) {
+      return;
     }
 
-    this.connection = new signalR.HubConnectionBuilder()
-      .withUrl(HUB_URL)
-      .withAutomaticReconnect()
-      .build();
+    if (this.startPromise) {
+      return this.startPromise;
+    }
 
-    this.connection.onreconnected(async () => {
-      if (this.joinedParkingLotId) {
-        await this.joinParkingLot(this.joinedParkingLotId);
-      }
+    this.startPromise = (async () => {
+      this.connection = new signalR.HubConnectionBuilder()
+        .withUrl(HUB_URL)
+        .withAutomaticReconnect()
+        .build();
+
+      this.connection.onreconnected(async () => {
+        if (this.joinedParkingLotId) {
+          await this.joinParkingLot(this.joinedParkingLotId);
+        }
+      });
+
+      await this.connection.start();
+      console.log('[SignalR] Connected');
+    })().finally(() => {
+      this.startPromise = null;
     });
 
-    await this.connection.start();
-    console.log('[SignalR] Connected');
+    return this.startPromise;
   }
 
   async joinParkingLot(parkingLotId: string): Promise<void> {
@@ -55,11 +60,9 @@ export class SignalRService {
     this.connection.on('SpotUpdated', callback);
   }
 
-  // ✅ NOVO: Listener para atualizações silenciosas do Dashboard (KPIs + Ranking)
-  onUpdateDashboardStats(callback: (stats: DashboardOverviewDto) => void): void {
+  onUpdateDashboardStats(callback: (stats: unknown) => void): void {
     if (!this.connection) throw new Error('Not connected');
-    this.connection.on('UpdateDashboardStats', (data: DashboardOverviewDto) => {
-      console.log('[SignalR] Dashboard stats updated:', data);
+    this.connection.on('UpdateDashboardStats', (data: unknown) => {
       callback(data);
     });
   }
@@ -69,15 +72,14 @@ export class SignalRService {
   }
 
   async stop(): Promise<void> {
-    if (!this.connection) {
-      return;
-    }
-
-    if (this.connection.state !== signalR.HubConnectionState.Disconnected) {
-      await this.connection.stop();
-    }
-
+    const conn = this.connection;
+    this.connection = null;
     this.joinedParkingLotId = null;
+    this.startPromise = null;
+
+    if (conn && conn.state !== signalR.HubConnectionState.Disconnected) {
+      await conn.stop().catch(() => {});
+    }
   }
 }
 

@@ -69,16 +69,6 @@ function WebGLNotSupportedFallback() {
   );
 }
 
-function SoftwareRendererWarning() {
-  return (
-    <div className="absolute top-4 left-4 bg-yellow-900 border-2 border-yellow-600 rounded p-4 z-20 max-w-sm">
-      <p className="text-yellow-100 text-sm">
-        ⚠️ <strong>Performance Baixa:</strong> Usando renderer de software. 
-        Ative hardware acceleration para melhor desempenho.
-      </p>
-    </div>
-  );
-}
 
 interface ParkingLotWithFallbackProps {
   spots: ParkingSpot[];
@@ -102,8 +92,6 @@ export function ParkingLotWithFallback({ spots }: ParkingLotWithFallbackProps) {
 
   return (
     <div className="relative w-full h-screen">
-      {!webglInfo.isHardwareAccelerated && <SoftwareRendererWarning />}
-      
       <ParkingLot spots={spots} />
       
       {/* Debug info (development only) */}

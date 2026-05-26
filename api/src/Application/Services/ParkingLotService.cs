@@ -49,7 +49,7 @@ public class ParkingLotService : IParkingLotService
             Name = request.Name,
             Address = request.Address,
             TotalSpots = request.TotalSpots,
-            HourlyRate = request.HourlyRate
+            RatePerMinute = request.RatePerMinute
         };
 
         // Auto-create spots
@@ -77,7 +77,7 @@ public class ParkingLotService : IParkingLotService
 
         lot.Name = request.Name;
         lot.Address = request.Address;
-        lot.HourlyRate = request.HourlyRate;
+        lot.RatePerMinute = request.RatePerMinute;
         lot.IsActive = request.IsActive;
         lot.UpdatedAt = DateTime.UtcNow;
 
@@ -104,5 +104,5 @@ public class ParkingLotService : IParkingLotService
 
     private static ParkingLotResponseDto MapToDto(ParkingLot lot, int available) => new(
         lot.Id, lot.Name, lot.Address, lot.TotalSpots, available,
-        lot.HourlyRate, lot.IsActive, lot.CreatedAt);
+        lot.RatePerMinute, lot.IsActive, lot.CreatedAt);
 }

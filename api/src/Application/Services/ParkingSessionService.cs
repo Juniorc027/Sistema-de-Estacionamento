@@ -104,7 +104,7 @@ public class ParkingSessionService : IParkingSessionService
             session.EndTime = DateTime.UtcNow;
             session.Duration = session.EndTime.Value - session.StartTime;
             session.Status = SessionStatus.Completed;
-            session.TotalAmount = CalculateAmount(session.Duration.Value, lot?.HourlyRate ?? 0);
+            session.TotalAmount = CalculateAmount(session.Duration.Value, lot?.RatePerMinute ?? 5.00m);
             session.UpdatedAt = DateTime.UtcNow;
             _uow.ParkingSessions.Update(session);
 
@@ -174,10 +174,10 @@ public class ParkingSessionService : IParkingSessionService
             session.ParkingSpot?.SpotNumber ?? ""));
     }
 
-    private static decimal CalculateAmount(TimeSpan duration, decimal hourlyRate)
+    private static decimal CalculateAmount(TimeSpan duration, decimal ratePerMinute)
     {
-        var hours = Math.Ceiling(duration.TotalMinutes / 60.0);
-        return (decimal)hours * hourlyRate;
+        var minutes = Math.Ceiling(duration.TotalMinutes);
+        return (decimal)minutes * ratePerMinute;
     }
 
     private static ParkingSessionResponseDto MapToDto(ParkingSession s, string plate, string spotNumber) => new(

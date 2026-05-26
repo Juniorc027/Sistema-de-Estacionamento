@@ -4,12 +4,12 @@ public record CreateParkingLotDto(
     string Name,
     string Address,
     int TotalSpots,
-    decimal HourlyRate);
+    decimal RatePerMinute);
 
 public record UpdateParkingLotDto(
     string Name,
     string Address,
-    decimal HourlyRate,
+    decimal RatePerMinute,
     bool IsActive);
 
 public record ParkingLotResponseDto(
@@ -18,6 +18,6 @@ public record ParkingLotResponseDto(
     string Address,
     int TotalSpots,
     int AvailableSpots,
-    decimal HourlyRate,
+    decimal RatePerMinute,
     bool IsActive,
     DateTime CreatedAt);

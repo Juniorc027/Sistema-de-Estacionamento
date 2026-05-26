@@ -14,7 +14,7 @@ public class ParkingLotConfiguration : IEntityTypeConfiguration<ParkingLot>
         builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
         builder.Property(x => x.Address).HasColumnName("address").HasMaxLength(255).IsRequired();
         builder.Property(x => x.TotalSpots).HasColumnName("total_spots");
-        builder.Property(x => x.HourlyRate).HasColumnName("hourly_rate").HasPrecision(10, 2);
+        builder.Property(x => x.RatePerMinute).HasColumnName("rate_per_minute").HasPrecision(10, 2);
         builder.Property(x => x.IsActive).HasColumnName("is_active");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");

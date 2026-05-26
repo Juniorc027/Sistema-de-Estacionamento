@@ -52,7 +52,7 @@ public static class DataSeeder
                     Name = "Estacionamento Central",
                     Address = "Rua Principal, 100 - Centro",
                     TotalSpots = TotalSeedSpots,
-                    HourlyRate = 5.00m,
+                    RatePerMinute = 5.00m,
                     IsActive = true
                 };
 

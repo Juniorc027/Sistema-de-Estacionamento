@@ -210,12 +210,12 @@ public class SessionManagementService : ISessionManagementService
             activeSession.Status = SessionStatus.Completed;
             activeSession.UpdatedAt = DateTime.UtcNow;
 
-            // Calcula valor (simples: duração em horas * taxa horária)
+            // Calcula valor: minutos * tarifa por minuto
             var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
             if (lot != null && activeSession.Duration.HasValue)
             {
-                var durationHours = activeSession.Duration.Value.TotalHours;
-                activeSession.TotalAmount = (decimal)Math.Ceiling(durationHours) * lot.HourlyRate;
+                var minutes = Math.Ceiling(activeSession.Duration.Value.TotalMinutes);
+                activeSession.TotalAmount = (decimal)minutes * lot.RatePerMinute;
             }
 
             _uow.ParkingSessions.Update(activeSession);

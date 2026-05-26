@@ -537,4 +537,112 @@ public class ReportService : IReportService
             return new List<SpotRankingDto>();
         }
     }
+
+    public async Task<RevenueReportDto> GetRevenueReportAsync(Guid parkingLotId, DateTime from, DateTime to)
+    {
+        var toInclusive = to.Date.AddDays(1).AddTicks(-1);
+        var sessions = await _uow.ParkingSessions.GetByPeriodAsync(parkingLotId, from, toInclusive);
+        var completed = sessions.Where(s => s.TotalAmount.HasValue).ToList();
+
+        var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
+        var totalRevenue = completed.Sum(s => s.TotalAmount!.Value);
+        var sessionsCount = completed.Count;
+        var averageTicket = sessionsCount > 0 ? totalRevenue / sessionsCount : 0m;
+
+        var perDay = completed
+            .GroupBy(s => s.StartTime.Date)
+            .OrderBy(g => g.Key)
+            .Select(g => new RevenueDayDto(
+                Date: g.Key,
+                SessionsCount: g.Count(),
+                Revenue: g.Sum(s => s.TotalAmount!.Value),
+                AverageDurationMinutes: g.Where(s => s.Duration.HasValue).Select(s => s.Duration!.Value.TotalMinutes).DefaultIfEmpty(0).Average()
+            )).ToList();
+
+        var perSpot = completed
+            .GroupBy(s => s.ParkingSpot?.SpotNumber ?? "N/A")
+            .OrderByDescending(g => g.Sum(s => s.TotalAmount!.Value))
+            .Select(g => new RevenueSpotDto(
+                SpotNumber: g.Key,
+                SessionsCount: g.Count(),
+                Revenue: g.Sum(s => s.TotalAmount!.Value),
+                AverageDurationMinutes: g.Where(s => s.Duration.HasValue).Select(s => s.Duration!.Value.TotalMinutes).DefaultIfEmpty(0).Average()
+            )).ToList();
+
+        return new RevenueReportDto(
+            ParkingLotId: parkingLotId,
+            ParkingLotName: lot?.Name ?? "Estacionamento",
+            TotalRevenue: totalRevenue,
+            SessionsCount: sessionsCount,
+            AverageTicket: averageTicket,
+            RatePerMinute: lot?.RatePerMinute ?? 5.00m,
+            From: from,
+            To: to,
+            PerDay: perDay,
+            PerSpot: perSpot
+        );
+    }
+
+    public async Task<SpotComparisonDto> GetSpotComparisonAsync(Guid parkingLotId, DateTime from, DateTime to)
+    {
+        var toInclusive = to.Date.AddDays(1).AddTicks(-1);
+        var sessions = await _uow.ParkingSessions.GetByPeriodAsync(parkingLotId, from, toInclusive);
+        var sessionList = sessions.ToList();
+
+        var allSpots = await _uow.ParkingSpots.GetAllAsync();
+        var spotsInLot = allSpots.Where(s => s.ParkingLotId == parkingLotId && !s.IsDeleted).ToList();
+
+        var lot = await _uow.ParkingLots.GetByIdAsync(parkingLotId);
+        var periodHours = (toInclusive - from).TotalHours;
+        var totalSpots = spotsInLot.Count;
+
+        var spotItems = spotsInLot.Select(spot =>
+        {
+            var spotSessions = sessionList.Where(s => s.ParkingSpotId == spot.Id).ToList();
+            var useCount = spotSessions.Count;
+            var withDuration = spotSessions.Where(s => s.Duration.HasValue).ToList();
+            var avgDuration = withDuration.Any() ? withDuration.Average(s => s.Duration!.Value.TotalMinutes) : 0;
+            var totalDurationHours = withDuration.Sum(s => s.Duration!.Value.TotalHours);
+            var occupancyRate = periodHours > 0 && totalSpots > 0
+                ? (decimal)(totalDurationHours / (periodHours * totalSpots)) * 100
+                : 0m;
+
+            return new { spot, useCount, avgDuration, occupancyRate };
+        }).ToList();
+
+        var useCounts = spotItems.Select(x => (double)x.useCount).ToList();
+        var average = useCounts.Any() ? useCounts.Average() : 0;
+        var stdDev = useCounts.Any()
+            ? Math.Sqrt(useCounts.Sum(c => Math.Pow(c - average, 2)) / useCounts.Count)
+            : 0;
+
+        var allSpotDtos = spotItems
+            .OrderByDescending(x => x.useCount)
+            .Select((x, idx) =>
+            {
+                var label = x.useCount > average + stdDev ? "Alta Disputa"
+                    : x.useCount < average - stdDev ? "Baixa Disputa"
+                    : "Disputa Média";
+                return new SpotComparisonItemDto(
+                    SpotNumber: x.spot.SpotNumber,
+                    UseCount: x.useCount,
+                    AverageDurationMinutes: x.avgDuration,
+                    OccupancyRate: x.occupancyRate,
+                    CurrentStatus: x.spot.Status.ToString(),
+                    CompetitivenessLabel: label
+                );
+            }).ToList();
+
+        return new SpotComparisonDto(
+            ParkingLotId: parkingLotId,
+            ParkingLotName: lot?.Name ?? "Estacionamento",
+            AverageUseCount: average,
+            StandardDeviation: stdDev,
+            From: from,
+            To: to,
+            TopSpots: allSpotDtos.Take(5).ToList(),
+            BottomSpots: allSpotDtos.TakeLast(5).ToList(),
+            AllSpots: allSpotDtos
+        );
+    }
 }
