@@ -92,7 +92,7 @@ export function FaturamentoModal({ open, onClose }: Props) {
                 <tbody>
                   {data.perDay.map((d) => (
                     <tr key={d.date} className="border-b border-zinc-800 hover:bg-zinc-800/40">
-                      <td className="py-2 px-3 text-zinc-300">{new Date(d.date).toLocaleDateString('pt-BR')}</td>
+                      <td className="py-2 px-3 text-zinc-300">{new Date(d.date.endsWith('Z') ? d.date : d.date + 'Z').toLocaleDateString('pt-BR')}</td>
                       <td className="py-2 px-3 text-right text-white">{d.sessionsCount}</td>
                       <td className="py-2 px-3 text-right text-emerald-400 font-medium">R$ {d.revenue.toFixed(2)}</td>
                       <td className="py-2 px-3 text-right text-zinc-300">{d.averageDurationMinutes.toFixed(0)} min</td>

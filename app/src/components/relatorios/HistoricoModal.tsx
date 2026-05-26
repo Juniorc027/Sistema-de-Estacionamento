@@ -82,8 +82,8 @@ export function HistoricoModal({ open, onClose }: Props) {
                   <tr key={row.sessionId} className="border-b border-zinc-800 hover:bg-zinc-800/40 transition-colors">
                     <td className="py-2 px-3 text-white font-mono">{row.spotNumber}</td>
                     <td className="py-2 px-3 text-zinc-300">{row.licensePlate}</td>
-                    <td className="py-2 px-3 text-zinc-300">{new Date(row.entryTime).toLocaleString('pt-BR')}</td>
-                    <td className="py-2 px-3 text-zinc-300">{row.exitTime ? new Date(row.exitTime).toLocaleString('pt-BR') : <span className="text-emerald-400">Em curso</span>}</td>
+                    <td className="py-2 px-3 text-zinc-300">{new Date(row.entryTime.endsWith('Z') ? row.entryTime : row.entryTime + 'Z').toLocaleString('pt-BR')}</td>
+                    <td className="py-2 px-3 text-zinc-300">{row.exitTime ? new Date(row.exitTime.endsWith('Z') ? row.exitTime : row.exitTime + 'Z').toLocaleString('pt-BR') : <span className="text-emerald-400">Em curso</span>}</td>
                     <td className="py-2 px-3 text-zinc-300">{formatDuration(row.duration as unknown as string)}</td>
                     <td className="py-2 px-3 text-right text-emerald-400 font-medium">R$ {row.amount.toFixed(2)}</td>
                   </tr>

@@ -53,7 +53,8 @@ export function TimelineModal({ open, onClose }: Props) {
       ) : (
         <div className="space-y-2">
           {data.map((item) => {
-            const hour = new Date(item.hour).getHours();
+            const hourStr = item.hour.endsWith('Z') ? item.hour : item.hour + 'Z';
+            const hour = new Date(hourStr).getHours();
             const pct = maxOccupancy > 0 ? (Number(item.averageOccupancy) / maxOccupancy) * 100 : 0;
             const barColor = Number(item.averageOccupancy) > 80 ? 'bg-red-500' : Number(item.averageOccupancy) > 50 ? 'bg-amber-500' : 'bg-blue-500';
 
