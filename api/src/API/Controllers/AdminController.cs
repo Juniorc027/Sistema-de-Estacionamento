@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ParkingSystem.Application.Common;
 using ParkingSystem.Application.DTOs.Admin;
 using ParkingSystem.Domain.Enums;
 using ParkingSystem.Infrastructure.Data;
@@ -43,10 +44,14 @@ public class AdminController : ControllerBase
                 ? Math.Round((decimal)occupiedSpots / totalSpots * 100, 1)
                 : 0m;
 
-            // ── Faturamento de hoje ────────────────────────────────
-            var todayUtc = DateTime.UtcNow.Date;
-            var tomorrowUtc = todayUtc.AddDays(1);
+            // ── "Hoje" no fuso de São Paulo → convertido para UTC para query no banco ──
+            var nowBr        = BrazilClock.Now;
+            var todayBr      = nowBr.Date;
+            var tomorrowBr   = todayBr.AddDays(1);
+            var todayUtc     = BrazilClock.ToUtc(todayBr);
+            var tomorrowUtc  = BrazilClock.ToUtc(tomorrowBr);
 
+            // ── Faturamento de hoje ────────────────────────────────
             var todaySessions = await _db.ParkingSessions
                 .Where(s => s.ParkingSpot.ParkingLotId == parkingLotId
                          && s.StartTime >= todayUtc
@@ -63,27 +68,28 @@ public class AdminController : ControllerBase
                 : 0m;
 
             // ── Estimativa mensal ──────────────────────────────────
-            var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-            var daysInMonth = DateTime.DaysInMonth(DateTime.UtcNow.Year, DateTime.UtcNow.Month);
-            var daysElapsed = Math.Max(1, DateTime.UtcNow.Day);
+            var monthStartBr  = new DateTime(nowBr.Year, nowBr.Month, 1);
+            var monthStartUtc = BrazilClock.ToUtc(monthStartBr);
+            var daysInMonth   = DateTime.DaysInMonth(nowBr.Year, nowBr.Month);
+            var daysElapsed   = Math.Max(1, nowBr.Day);
 
             var monthRevenue = await _db.ParkingSessions
                 .Where(s => s.ParkingSpot.ParkingLotId == parkingLotId
-                         && s.StartTime >= monthStart
+                         && s.StartTime >= monthStartUtc
                          && s.StartTime < tomorrowUtc
                          && s.Status == SessionStatus.Completed
                          && s.TotalAmount.HasValue)
                 .SumAsync(s => s.TotalAmount!.Value);
 
-            var dailyAverage = Math.Round(monthRevenue / daysElapsed, 2);
+            var dailyAverage   = Math.Round(monthRevenue / daysElapsed, 2);
             var monthlyEstimate = Math.Round(dailyAverage * daysInMonth, 2);
 
             // ── Top 5 vagas disputadas (últimos 30 dias) ───────────
-            var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+            var thirtyDaysAgoUtc = BrazilClock.ToUtc(todayBr.AddDays(-30));
 
             var topRaw = await _db.ParkingSessions
                 .Where(s => s.ParkingSpot.ParkingLotId == parkingLotId
-                         && s.StartTime >= thirtyDaysAgo
+                         && s.StartTime >= thirtyDaysAgoUtc
                          && s.Status == SessionStatus.Completed)
                 .GroupBy(s => new { s.ParkingSpotId, s.ParkingSpot.SpotNumber, s.ParkingSpot.Status })
                 .Select(g => new
@@ -102,28 +108,28 @@ public class AdminController : ControllerBase
                 x.SpotNumber,
                 x.UseCount,
                 Math.Round(x.AvgDuration, 1),
-                x.Status == ParkingSpotStatus.Occupied ? "Ocupada" :
-                x.Status == ParkingSpotStatus.Reserved ? "Reservada" :
+                x.Status == ParkingSpotStatus.Occupied   ? "Ocupada"    :
+                x.Status == ParkingSpotStatus.Reserved   ? "Reservada"  :
                 x.Status == ParkingSpotStatus.Maintenance ? "Manutenção" : "Livre"
             )).ToList();
 
             var result = new AdminOverviewDto(
-                ParkingLotId: parkingLotId,
-                ParkingLotName: lot.Name,
-                TotalSpots: totalSpots,
-                OccupiedSpots: occupiedSpots,
-                FreeSpots: totalSpots - occupiedSpots,
-                OccupancyPercentage: occupancyPct,
-                RevenueTodayTotal: revenueTodayTotal,
-                SessionsTodayCount: sessionsTodayCount,
-                AverageTicketToday: averageTicketToday,
+                ParkingLotId:           parkingLotId,
+                ParkingLotName:         lot.Name,
+                TotalSpots:             totalSpots,
+                OccupiedSpots:          occupiedSpots,
+                FreeSpots:              totalSpots - occupiedSpots,
+                OccupancyPercentage:    occupancyPct,
+                RevenueTodayTotal:      revenueTodayTotal,
+                SessionsTodayCount:     sessionsTodayCount,
+                AverageTicketToday:     averageTicketToday,
                 MonthlyRevenueEstimate: monthlyEstimate,
-                MonthlyRevenueSoFar: monthRevenue,
-                DailyAverageRevenue: dailyAverage,
-                DaysElapsedInMonth: daysElapsed,
-                DaysInMonth: daysInMonth,
-                TopSpots: topSpots,
-                GeneratedAt: DateTime.UtcNow
+                MonthlyRevenueSoFar:    monthRevenue,
+                DailyAverageRevenue:    dailyAverage,
+                DaysElapsedInMonth:     daysElapsed,
+                DaysInMonth:            daysInMonth,
+                TopSpots:               topSpots,
+                GeneratedAt:            nowBr   // exibe horário de SP no campo generatedAt
             );
 
             return Ok(result);
@@ -138,6 +144,7 @@ public class AdminController : ControllerBase
     /// <summary>
     /// GET /api/admin/logs/{parkingLotId}?page=1&pageSize=30
     /// Retorna logs do sistema paginados, mais recentes primeiro.
+    /// Os timestamps são convertidos para o fuso de São Paulo antes de retornar.
     /// </summary>
     [HttpGet("logs/{parkingLotId:guid}")]
     public async Task<IActionResult> GetLogs(Guid parkingLotId, [FromQuery] int page = 1, [FromQuery] int pageSize = 30)
@@ -149,11 +156,20 @@ public class AdminController : ControllerBase
             var totalCount = await query.CountAsync();
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-            var items = await query
+            var raw = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(l => new AdminLogDto(l.Id, l.Event, l.Description, l.Source, l.OccurredAt))
+                .Select(l => new { l.Id, l.Event, l.Description, l.Source, l.OccurredAt })
                 .ToListAsync();
+
+            // Converte OccurredAt (UTC no banco) para horário de SP
+            var items = raw.Select(l => new AdminLogDto(
+                l.Id,
+                l.Event,
+                l.Description,
+                l.Source,
+                BrazilClock.ToLocal(l.OccurredAt)
+            )).ToList();
 
             return Ok(new AdminLogsResultDto(items, totalCount, page, pageSize, totalPages));
         }

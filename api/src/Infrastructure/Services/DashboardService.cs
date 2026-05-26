@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using ParkingSystem.Application.Common;
 using ParkingSystem.Application.DTOs.Dashboard;
 using ParkingSystem.Application.Services.Interfaces;
 using ParkingSystem.Domain.Enums;
@@ -81,7 +82,7 @@ public class DashboardService : IDashboardService
                 .Max(g => g?.Count() ?? 0);
 
             // ===== HORÁRIO DE PICO (HOJE) =====
-            var todayStart = DateTime.UtcNow.Date;
+            var todayStart = BrazilClock.ToUtc(BrazilClock.Today);
             var todayEnd = todayStart.AddDays(1);
 
             var peakHourGroup = sessions24h
@@ -195,7 +196,7 @@ public class DashboardService : IDashboardService
         {
             _logger.LogInformation("Calculating occupancy timeline for parking lot: {ParkingLotId}", parkingLotId);
 
-            var todayStart = DateTime.UtcNow.Date;
+            var todayStart = BrazilClock.ToUtc(BrazilClock.Today);
             var todayEnd = todayStart.AddDays(1);
 
             // Todas as sessões que iniciaram hoje
@@ -469,7 +470,7 @@ public class DashboardService : IDashboardService
                 .Max(g => g?.Count() ?? 0);
 
             // ===== HORÁRIO DE PICO - HOJE =====
-            var todayStart = DateTime.UtcNow.Date;
+            var todayStart = BrazilClock.ToUtc(BrazilClock.Today);
             var todayEnd = todayStart.AddDays(1);
 
             var peakHourGroup = sessions24h
