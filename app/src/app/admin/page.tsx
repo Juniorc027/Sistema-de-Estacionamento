@@ -119,7 +119,7 @@ export default function AdminPage() {
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [signalrConnected, setSignalrConnected] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchOverview = useCallback(async () => {
     try {
@@ -197,9 +197,11 @@ export default function AdminPage() {
     };
   }, [fetchOverview]);
 
-  // Scroll log to top on new entries
+  // Scroll log container to top when new live entry arrives
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (liveLogs.length > 0) {
+      logContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, [liveLogs]);
 
   const allLogs: Array<LiveLogEntry | (LogEntry & { isLive: false })> = [
@@ -402,7 +404,7 @@ export default function AdminPage() {
               <span className="ml-auto text-xs text-zinc-600">{allLogs.length} eventos</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto max-h-80 space-y-1 pr-1">
+            <div ref={logContainerRef} className="flex-1 overflow-y-auto max-h-80 space-y-1 pr-1">
               <AnimatePresence initial={false}>
                 {loadingLogs && allLogs.length === 0 ? (
                   <div className="space-y-2">
@@ -454,7 +456,6 @@ export default function AdminPage() {
                   })
                 )}
               </AnimatePresence>
-              <div ref={logEndRef} />
             </div>
           </motion.div>
         </div>
