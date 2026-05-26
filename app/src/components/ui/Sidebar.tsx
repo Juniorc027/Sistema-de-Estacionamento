@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { LayoutDashboard, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, BarChart3, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -44,6 +44,22 @@ export function Sidebar() {
             </div>
             {isExpanded && (
               <span className="text-sm whitespace-nowrap text-left">Relatórios</span>
+            )}
+          </motion.button>
+
+          <motion.button
+            whileHover={{ x: 2 }}
+            whileTap={{ scale: 0.98 }}
+            type="button"
+            onClick={() => router.push('/admin')}
+            className="w-full h-11 rounded-lg flex items-center gap-3 px-2 transition-all duration-200 font-medium text-zinc-300 hover:bg-zinc-800/80 hover:text-white border border-transparent hover:border-zinc-700"
+            title="Painel Admin"
+          >
+            <div className="flex-shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            {isExpanded && (
+              <span className="text-sm whitespace-nowrap text-left">Admin</span>
             )}
           </motion.button>
         </nav>
